@@ -1,0 +1,5 @@
+Inputs/
+inicalc/
+command_to_run
+*.pbs
+__pycache__/
