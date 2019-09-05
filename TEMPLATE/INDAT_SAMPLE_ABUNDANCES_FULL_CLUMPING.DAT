@@ -1,0 +1,15 @@
+ 'Name'
+ T T           0         100
+  0.000000000000000E+000
+   temp        logg        radius
+   120.000000000000       0.600000000000000
+mdot    0.1000 vinf    beta    0.1000
+  He_abundance       2.000000000000000E+000
+ F T F T T
+   vturb        0.50000000000000      T T
+ T F           1           2
+ clump       0.1 0.2
+C_abundance
+N_abundance
+O_abundance
+Si_abundance

@@ -1,0 +1,158 @@
+;***********************************************************************
+
+; PRO icstm_help
+
+;+
+; NAME:
+;	icstm_help
+;
+; PURPOSE:
+;	makes the html help files for available IDL software routine
+;
+; CATEGORY:
+;	icstm_help
+;
+; CALLING SEQUENCE:
+;	icstm_help
+;
+; INPUTS:
+;	none
+;
+; OPTIONAL INPUTS:
+;	
+;	
+; KEYWORD PARAMETERS:
+;	
+;
+; OUTPUTS:
+;	
+;
+; OPTIONAL OUTPUTS:
+;	
+;
+; COMMON BLOCKS:
+;	
+;
+; SIDE EFFECTS:
+;	write html files to disk
+;
+; RESTRICTIONS:
+;	
+;
+; PROCEDURE:
+;	
+;
+; EXAMPLE:
+;	
+;
+; MODIFICATION HISTORY:
+; 	Written by:	Seb Oliver 18th Feb 1998
+;	July, 1996	
+;	Modified by:    Matthew Graham 16 June 1999
+;			changed to pick up latest version of routines
+;-
+
+
+
+;----------------------------------------------------------------------
+; ICSTM Inhouse software
+;----------------------------------------------------------------------
+
+
+stem='/iso/arch/soft/local/lib/'
+stem='/contrib-linux/rsi/idl_5.4/icstm_idl/'
+
+dirs=findfile(stem)
+helpstem='/iso/arch/httpd/www/help/localhelp/'
+
+helpstem='/contrib-linux/rsi/idl_5.4/icstm_idl/help/'
+
+
+for i=0,n_elements(dirs)-1 do icmk_html_help,stem+dirs(i),$
+             helpstem+dirs(i)+'.html'
+exit
+
+
+;----------------------------------------------------------------------
+; CIA help
+;----------------------------------------------------------------------
+;icmk_html_help,'/arch/soft/lib/cia_APR96/APR96/astron','/arch/soft/lib/help/CIA_APR96_astron.html'
+;icmk_html_help,'/arch/soft/lib/cia_APR96/APR96/graphics','/arch/soft/lib/help/CIA_APR96_graphics.html'
+;icmk_html_help,'/arch/soft/lib/cia_APR96/APR96/io','/arch/soft/lib/help/CIA_APR96_io.html'
+;icmk_html_help,'/arch/soft/lib/cia_APR96/APR96/misc','/arch/soft/lib/help/CIA_APR96_misc.html'
+;icmk_html_help,'/arch/soft/lib/cia_APR96/APR96/process','/arch/soft/lib/help/CIA_APR96_process.html'
+;icmk_html_help,'/arch/soft/lib/cia_APR96/APR96/simul','/arch/soft/lib/help/CIA_APR96_simul.html'
+
+icmk_html_help,'/arch/soft/lib/cia_NOV97/NOV97/astron','/arch/soft/lib/help/CIA_astron.html'
+icmk_html_help,'/arch/soft/lib/cia_NOV97/NOV97/graphics','/arch/soft/lib/help/CIA_graphics.html'
+icmk_html_help,'/arch/soft/lib/cia_NOV97/NOV97/io','/arch/soft/lib/help/CIA_io.html'
+icmk_html_help,'/arch/soft/lib/cia_NOV97/NOV97/misc','/arch/soft/lib/help/CIA_misc.html'
+icmk_html_help,'/arch/soft/lib/cia_NOV97/NOV97/process','/arch/soft/lib/help/CIA_process.html'
+icmk_html_help,'/arch/soft/lib/cia_NOV97/NOV97/simul','/arch/soft/lib/help/CIA_simul.html'
+
+icmk_html_help,'/soft/lib/cia/OCT98/astron','/arch/soft/lib/help/CIA_astron.html'
+icmk_html_help,'/soft/lib/cia/OCT98/graphics','/arch/soft/lib/help/CIA_graphics.html'
+icmk_html_help,'/soft/lib/cia/OCT98/io','/arch/soft/lib/help/CIA_io.html'
+icmk_html_help,'/soft/lib/cia/OCT98/misc','/arch/soft/lib/help/CIA_misc.html'
+icmk_html_help,'/soft/lib/cia/OCT98/process','/arch/soft/lib/help/CIA_process.html'
+icmk_html_help,'/soft/lib/cia/OCT98/simul','/arch/soft/lib/help/CIA_simul.html'
+
+;----------------------------------------------------------------------
+; CSIM Routines
+;----------------------------------------------------------------------
+
+icmk_html_help,'/arch/soft/lib/csim/pro','/arch/soft/lib/help/CSIM_routines.html'
+icmk_html_help,'/soft/lib/csim/pro','/arch/soft/lib/help/CSIM_routines.html'
+;----------------------------------------------------------------------
+; Astrolib Help
+;----------------------------------------------------------------------
+
+stem='/iso/arch/soft/lib/astrolib_jun98/pro/'
+dirs=findfile(stem)
+helpstem='/iso/arch/httpd/www/help/'
+
+
+for i=0,n_elements(dirs)-1 do icmk_html_help,stem+dirs(i),$
+             helpstem+dirs(i)+'.html'
+
+icmk_html_help,'/iso/arch/soft/lib/astrolib_jun98/pro/*','/iso/arch/httpd/www/help/astrolib.html'
+icmk_html_help,'/soft/lib/astrolib_nov98/pro/*','/iso/arch/httpd/www/help/astrolib.html'
+
+;----------------------------------------------------------------------
+;PIA routines
+;----------------------------------------------------------------------
+
+;icmk_html_help,'/arch/soft/lib/pia_V5.4/incl/','/arch/soft/lib/help/PIA_include.html'
+;icmk_html_help,'/arch/soft/lib/pia_V5.4/support/','/arch/soft/lib/help/PIA_support.html'
+
+icmk_html_help,'/arch/soft/lib/pia_V7.0/incl/','/arch/soft/lib/help/PIA_include.html'
+icmk_html_help,'/arch/soft/lib/pia_V7.0/support/','/arch/soft/lib/help/PIA_support.html'
+
+icmk_html_help,'/soft/lib/pia_V7.2/incl/','/arch/soft/lib/help/PIA_include.html'
+icmk_html_help,'/soft/lib/pia_V7.2/support/','/arch/soft/lib/help/PIA_support.html'
+
+;----------------------------------------------------------------------
+;Schlegal Map code
+;----------------------------------------------------------------------
+;icmk_html_help,'/iso/arch/soft/lib/CodeIDL/','/arch/soft/lib/help/CodeIDL.html'
+icmk_html_help,'/soft/lib/misc_idl/CodeIDL/','/arch/soft/lib/help/CodeIDL.html'
+;----------------------------------------------------------------------
+;Miscellaneous IDL routines
+;----------------------------------------------------------------------
+
+stem='/iso/arch/soft/lib/misc_idl/'
+dirs=findfile(stem)
+helpstem='/iso/arch/httpd/www/help/'
+
+for i=0,n_elements(dirs)-1 do icmk_html_help,stem+dirs(i),$
+             helpstem+dirs(i)+'.html'
+
+stem='/iso/arch/soft/lib/misc_idl/wwb/'
+dirs=findfile(stem)
+helpstem='/iso/arch/httpd/www/help/'
+
+
+for i=0,n_elements(dirs)-1 do icmk_html_help,stem+dirs(i),$
+             helpstem+dirs(i)+'.html'
+
+END

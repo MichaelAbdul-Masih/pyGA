@@ -1,0 +1,139 @@
+1c1
+< pro hprof,cat,star,ps=ps,vsini=vrot1,vrad=vrad,resol=resol1,vmacro=vmacro, $
+---
+> pro hprof,cat,star,ps=ps,vsini=vrot1,vrad=vrad,resol=resol1, $
+3c3
+< 	   color=color,lamcomp=lamcomp,profcomp=profcomp,vacuum=vacuum
+---
+> 	   color=color
+45,50c45
+<   if(obscomp eq 'oplot') then begin
+<    wobs=lamcomp
+<    pobs=profcomp
+<   endif else begin
+< ;  obsfile='$HOME/Observations/optical/'+obscomp
+<   obsfile='$HOME/Observations/optical/Gal_Bsg_Nevy/'+obscomp+'.sp'
+---
+>   obsfile='$HOME/MUNICH_05/bstars/spectra/'+obscomp
+52,56d46
+<   endelse
+<   if keyword_set(vacuum) then begin
+<   refrac,wobs
+<   endif  
+< 
+95c85,86
+< cat1=comp
+---
+> cat1='$HOME/MUNICH_05/bstars/models/'+comp
+> ;cat1='$HOME/nlte/bstars/bgrid/'+comp
+100,101c91,92
+< if keyword_set(vrot) or keyword_set(resol1) or keyword_set(vmacro) then begin
+< convol,x1,y1,xp,yp,resol=resol,vsini=vrot,vmacro=vmacro
+---
+> if keyword_set(vrot) or keyword_set(resol1) then begin
+> convol,x1,y1,xp,yp,resol=resol,vsini=vrot
+108,109c99,100
+< if keyword_set(vrot) or keyword_set(resol1) or keyword_set(vmacro) then begin
+< convol,x2,y2,xp,yp,resol=resol,vsini=vrot,vmacro=vmacro
+---
+> if keyword_set(vrot) or keyword_set(resol1) then begin
+> convol,x2,y2,xp,yp,resol=resol,vsini=vrot
+117,118c108,109
+< if keyword_set(vrot) or keyword_set(resol1) or keyword_set(vmacro) then begin
+< convol,x3,y3,xp,yp,resol=resol,vsini=vrot,vmacro=vmacro
+---
+> if keyword_set(vrot) or keyword_set(resol1) then begin
+> convol,x3,y3,xp,yp,resol=resol,vsini=vrot
+126,127c117,118
+< if keyword_set(vrot) or keyword_set(resol1) or keyword_set(vmacro) then begin
+< convol,x4,y4,xp,yp,resol=resol,vsini=vrot,vmacro=vmacro
+---
+> if keyword_set(vrot) or keyword_set(resol1) then begin
+> convol,x4,y4,xp,yp,resol=resol,vsini=vrot
+135,136c126,127
+< if keyword_set(vrot) or keyword_set(resol1) or keyword_set(vmacro) then begin
+< convol,x5,y5,xp,yp,resol=resol,vsini=vrot,vmacro=vmacro
+---
+> if keyword_set(vrot) or keyword_set(resol1) then begin
+> convol,x5,y5,xp,yp,resol=resol,vsini=vrot
+142,143d132
+< if keyword_set(color) then loadct,12
+< 
+155a145,146
+> if keyword_set(color) then loadct,12
+> 
+161a153,156
+> 
+> cat='$HOME/MUNICH_05/bstars/models/'+cat
+> ;cat='$HOME/MUNICH_05/bstars/bgrid/'+cat
+> 
+163,165c158,159
+< halpha,cat+'/OUT.HEPS'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y1), $
+< 	compmax=max(y1),wo=wobs,po=pobs
+---
+> halpha,cat+'/OUT.HEPS'+extension,vsini=vrot,resol=resol,compmin=min(y1), $
+> 	 compmax=max(y1),wo=wobs,po=pobs
+167,169c161,162
+< halpha,cat+'/OUT.HEPS'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y1), $
+< 	compmax=max(y1)
+---
+> halpha,cat+'/OUT.HEPS'+extension,vsini=vrot,resol=resol,compmin=min(y1), $
+> 	 compmax=max(y1)
+183,185c176,177
+< halpha,cat+'/OUT.HDELTA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y2), $
+< 	compmax=max(y2),wo=wobs,po=pobs
+---
+> halpha,cat+'/OUT.HDELTA'+extension,vsini=vrot,resol=resol,compmin=min(y2), $
+> 	 compmax=max(y2),wo=wobs,po=pobs
+187,189c179,180
+< halpha,cat+'/OUT.HDELTA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y2), $
+< 	compmax=max(y2)
+---
+> halpha,cat+'/OUT.HDELTA'+extension,vsini=vrot,resol=resol,compmin=min(y2), $
+> 	 compmax=max(y2)
+203,205c194,195
+< halpha,cat+'/OUT.HGAMMA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y3), $
+< 	compmax=max(y3),wo=wobs,po=pobs
+---
+> halpha,cat+'/OUT.HGAMMA'+extension,vsini=vrot,resol=resol,compmin=min(y3), $
+> 	 compmax=max(y3),wo=wobs,po=pobs
+207,209c197,198
+< halpha,cat+'/OUT.HGAMMA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y3), $
+< 	compmax=max(y3)
+---
+> halpha,cat+'/OUT.HGAMMA'+extension,vsini=vrot,resol=resol,compmin=min(y3), $
+> 	 compmax=max(y3)
+222,224c211,212
+< halpha,cat+'/OUT.HBETA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y4), $
+< 	compmax=max(y4),wo=wobs,po=pobs
+---
+> halpha,cat+'/OUT.HBETA'+extension,vsini=vrot,resol=resol,compmin=min(y4), $
+> 	 compmax=max(y4),wo=wobs,po=pobs
+226,228c214,215
+< halpha,cat+'/OUT.HBETA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y4), $
+< 	compmax=max(y4)
+---
+> halpha,cat+'/OUT.HBETA'+extension,vsini=vrot,resol=resol,compmin=min(y4), $
+> 	 compmax=max(y4)
+241,243c228,229
+< halpha,cat+'/OUT.HALPHA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y5), $
+< 	compmax=max(y5),wo=wobs,po=pobs
+---
+> halpha,cat+'/OUT.HALPHA'+extension,vsini=vrot,resol=resol,compmin=min(y5), $
+> 	 compmax=max(y5),wo=wobs,po=pobs
+245,247c231,232
+< halpha,cat+'/OUT.HALPHA'+extension,vsini=vrot,resol=resol,vmacro=vmacro, $
+< 	compmin=min(y5), $
+< 	compmax=max(y5)
+---
+> halpha,cat+'/OUT.HALPHA'+extension,vsini=vrot,resol=resol,compmin=min(y5), $
+> 	 compmax=max(y5)

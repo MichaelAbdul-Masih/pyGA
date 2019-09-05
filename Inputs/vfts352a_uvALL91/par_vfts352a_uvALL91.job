@@ -1,0 +1,32 @@
+#PBS -N vfts352a_uvALL91
+#PBS -l walltime=01:30:00
+#PBS -l pmem=8gb
+#PBS -l nodes=1:ppn=2:ivybridge
+#PBS -S /bin/bash
+#PBS -A default_project
+#PBS -m abe
+#PBS -M calum.hawcroft@kuleuven.be
+#PBS -r n
+#PBS -o /scratch/leuven/327/vsc32711/logs/stdout.log
+#PBS -e /scratch/leuven/327/vsc32711/logs/stderr.log
+
+cd $PBS_O_WORKDIR
+
+export FWver=V10.3.2
+export GA_DIR=/scratch/leuven/327/vsc32711/GA_ANALYSIS
+export FW_DIR=/scratch/leuven/327/vsc32711/pikaia/FASTWIND/$FWver
+export INICALC_DIR=$FW_DIR/inicalc
+export PIKAIA_DIR=/scratch/leuven/327/vsc32711/pikaia
+export PICKYFW_DIR=$PIKAIA_DIR/utils/picky_fw/ver_1.37
+
+#cp pfw_vfts352a_uvALL91.ini my_inifile
+
+module load OpenMPI/1.8.3-iccifort-11.1.080
+export PATH="${VSC_DATA}/miniconda3/bin:${PATH}"
+source activate ga2.7
+
+mpiexec --mca btl ^openib ${PICKYFW_DIR}/pickyfw2 << EOF
+"/scratch/leuven/327/vsc32711/GA_ANALYSIS/vfts352a_uvALL91/pfw_vfts352a_uvALL91.ini"
+"$PBS_O_WORKDIR"
+EOF
+
