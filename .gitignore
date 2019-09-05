@@ -1,6 +1,8 @@
-Inputs/
+Inputs/*
+!Inputs/.gitkeep
 inicalc/
 command_to_run
 *.pbs
 __pycache__/
 Runs/*
+!Runs/.gitkeep
