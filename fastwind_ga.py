@@ -43,6 +43,7 @@ def read_ini_file(object_name):
             lower, upper, step = data[i + num_lines*5+4][:-1].split(' ')
             print(np.ceil(np.log10(abs(float(upper) - float(lower)))))
             sig_digits = np.ceil(np.log10(abs(float(upper) - float(lower)))) - np.floor(np.log10(float(step)))
+            sig_digits += 2
             if np.log10(abs(float(upper) - float(lower)))%1 == 0:
                 sig_digits +=1
             if (float(upper) - float(lower)) != 0:
