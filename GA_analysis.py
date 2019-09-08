@@ -20,18 +20,18 @@ def calculateP(params, lc, chi2, normalize = False):
 
 
 
-path = '/STER/michael/pyGA/'
+path = '/scratch/leuven/324/vsc32406/pyGA/'
 
 run = sys.argv[1]
-
+if run[-1] != '/': run +='/'
 path = path + run
 
-x = pandas.read_csv(path + '/chi2.txt', sep=' ')
-x = x.rename(columns = {'#requiv@primary': 'requiv@primary'})
+x = pandas.read_csv(path + 'Output/chi2.txt', sep=' ')
+x = x.rename(columns = {'#teff': 'teff'})
 
-lc = np.loadtxt(path + '/vfts352a_uvALL91.norm')
+lc = np.loadtxt(path + 'vfts352a_uvALL91.norm')
 
-params = np.loadtxt(path + '/params.txt', dtype='str')
+params = np.loadtxt(path + 'Output/params.txt', dtype='str')
 
 probabilities = calculateP(params, lc, x['chi2'], True)
 
