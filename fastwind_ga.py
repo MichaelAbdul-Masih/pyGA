@@ -10,16 +10,18 @@ import glob
 from collections import OrderedDict
 # from PyAstronomy.pyasl import rotBroad, instrBroadGaussFast
 from subprocess import Popen, PIPE
+import getopt
 
 
-def create_GA_directory(object_name):
-    shutil.copytree('Inputs/' + object_name, object_name)
+def create_GA_directory(object_name, cont = False):
     run_dir = object_name + '/Run'
     output_dir = object_name + '/Output'
-    os.mkdir(run_dir)
-    os.mkdir(output_dir)
-    shutil.copytree('TEMPLATE', run_dir + '/TEMPLATE')
-    shutil.copytree('inicalc', run_dir + '/inicalc')
+    if not cont:
+        shutil.copytree('Inputs/' + object_name, object_name)
+        os.mkdir(run_dir)
+        os.mkdir(output_dir)
+        shutil.copytree('TEMPLATE', run_dir + '/TEMPLATE')
+        shutil.copytree('inicalc', run_dir + '/inicalc')
     return run_dir, output_dir
 
 
@@ -164,7 +166,8 @@ def run_fastwind(run_dir, output_dir, lines_dic, Z, param_set):
     total_red_chi2 = 0
     total_deg_of_freedom = 0
     line_fitnesses = []
-    os.mkdir('/'.join([output_dir, param_set['run_id'].split('_')[0], param_set['run_id']]))
+    out_mod_dir = '/'.join([output_dir, param_set['run_id'].split('_')[0], param_set['run_id']])
+    os.mkdir(out_mod_dir)
     for line in lines_dic.keys():
         new_line_file_name = model_dir + '/' + param_set['run_id'] + '/' + line + '.prof'
         os.system('python broaden.py -f ' + new_line_file_name + ' -r ' + str(lines_dic[line]['resolution']) + ' -v ' + str(param_set['vrot']) + ' -m -1')
@@ -174,7 +177,10 @@ def run_fastwind(run_dir, output_dir, lines_dic, Z, param_set):
         total_red_chi2 += red_chi2
         total_deg_of_freedom += dof
         line_fitnesses.append(1./red_chi2)
-        shutil.copy(new_line_file_name + '.fin', '/'.join([output_dir, param_set['run_id'].split('_')[0], param_set['run_id'], '.']))
+        shutil.copy(new_line_file_name + '.fin', out_mod_dir + '/.')
+
+    os.system('tar -cvzf ' + out_mod_dir + '.tar.gz ' + out_mod_dir)
+    shutil.rmtree(out_mod_dir)
 
     shutil.copy(model_dir + '/' + param_set['run_id'] + '/INDAT.DAT', '/'.join([output_dir, param_set['run_id'].split('_')[0], param_set['run_id'], '.']))
     shutil.rmtree(model_dir)
@@ -217,26 +223,62 @@ if not pool.is_master():
 start_time_prog = time.time()
 
 object_name = 'vfts352a_uvALL91'
+cont == False
+
+opts, args = getopt.getopt(sys.argv[1:], 'co:p:', ['continue', 'object=', 'pop_size=', 'population_size'])
+for opt, arg in opts:
+    if opt in ('-c', '--continue'):
+        cont == True
+    if opt in ('-o', '--object'):
+        object_name = str(arg)
+
+
 print('Creating GA directory...')
-run_dir, output_dir = create_GA_directory(object_name)
+run_dir, output_dir = create_GA_directory(object_name, cont)
 print('Reading ini file...')
 lines_dic, params, Z, K_mag, population_size, number_of_generations = read_ini_file(object_name)
 lines_dic = renormalize_spectra(lines_dic, object_name)
 
 
+for opt, arg in opts:
+    if opt in ('-p', '--pop_size', '--population_size'):
+        population_size = int(arg)
+
+
 keep_files = False
 
-
-# population_size = 59
-# number_of_generations = 500
-mutation_rate = 0.005
-print('Creating chromosome...')
-population_raw = GA.create_chromosome(params, population_size)
-# vs = GA.batch_translate_chromosomes(params, population_raw, 0)
-
 outfile = output_dir + '/chi2.txt'
+mutfile = output_dir + '/mutation_by_gen.txt'
+popfile = output_dir + '/raw_pop.npy'
 
-np.savetxt(output_dir + '/params.txt', np.array([[params[i].name, params[i].min, params[i].max, params[i].precision] for i in params.keys()]), fmt='%s')
+
+starting_generation = 0
+mutation_rate = 0.005
+
+if cont:
+    print('Loading chromosome...')
+    population_raw = np.load(popfile)
+    x = np.loadtxt(mutfile)
+    starting_generation, mutation_rate = x[-1]
+    try:
+        shutil.rmtree('/'.join([object_name, 'Output', str(starting_generation).zfill(4)]))
+        x = glob.glob('/'.join([object_name, 'Run', '*_*']))
+        pool.map(shutil.rmtree, x)
+    except:
+        pass
+
+else:
+    print('Creating chromosome...')
+    population_raw = GA.create_chromosome(params, population_size)
+
+    np.savetxt(output_dir + '/params.txt', np.array([[params[i].name, params[i].min, params[i].max, params[i].precision] for i in params.keys()]), fmt='%s')
+
+    with open(outfile, 'w') as f:
+        f.write('#' + ' '.join(params.keys()) + ' run_id chi2 fitness ' + ' '.join(lines_dic.keys()))
+
+    with open(mutfile, 'w') as f:
+        f.write('#Generation Mutation_rate\n')
+        f.write(' '.join([str(starting_generation), str(mutation_rate)]) + '\n')
 
 
 
@@ -245,11 +287,8 @@ best_mods = []
 
 number_of_lines = len(list(lines_dic.keys()))
 
-with open(outfile, 'w') as f:
-    f.write('#' + ' '.join(params.keys()) + ' run_id chi2 fitness ' + ' '.join(lines_dic.keys()))
 
-
-for generation in range(number_of_generations):
+for generation in range(starting_generation, number_of_generations):
     gen_start_time = time.time()
 
     population = GA.batch_translate_chromosomes(params, population_raw, generation)
@@ -263,6 +302,10 @@ for generation in range(number_of_generations):
     print(fitness)
     population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
     mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness)
+
+    np.save(popfile, np.array(population_raw))
+    with open(mutfile, 'a') as f:
+        f.write(' '.join([str(generation + 1), str(mutation_rate)]) + '\n')
 
     if np.max(fitness) > best_fitness:
         best_fitness = np.max(fitness)
