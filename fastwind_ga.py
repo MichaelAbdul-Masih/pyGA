@@ -223,12 +223,12 @@ if not pool.is_master():
 start_time_prog = time.time()
 
 object_name = 'vfts352a_uvALL91'
-cont == False
+cont = False
 
 opts, args = getopt.getopt(sys.argv[1:], 'co:p:', ['continue', 'object=', 'pop_size=', 'population_size'])
 for opt, arg in opts:
     if opt in ('-c', '--continue'):
-        cont == True
+        cont = True
     if opt in ('-o', '--object'):
         object_name = str(arg)
 
