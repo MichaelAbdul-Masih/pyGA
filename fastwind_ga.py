@@ -179,10 +179,10 @@ def run_fastwind(run_dir, output_dir, lines_dic, Z, param_set):
         line_fitnesses.append(1./red_chi2)
         shutil.copy(new_line_file_name + '.fin', out_mod_dir + '/.')
 
-    os.system('tar -cvzf ' + out_mod_dir + '.tar.gz ' + out_mod_dir)
+    shutil.copy(model_dir + '/' + param_set['run_id'] + '/INDAT.DAT', '/'.join([output_dir, param_set['run_id'].split('_')[0], param_set['run_id'], '.']))
+    os.system('tar -czf ' + out_mod_dir + '.tar.gz ' + out_mod_dir)
     shutil.rmtree(out_mod_dir)
 
-    shutil.copy(model_dir + '/' + param_set['run_id'] + '/INDAT.DAT', '/'.join([output_dir, param_set['run_id'].split('_')[0], param_set['run_id'], '.']))
     shutil.rmtree(model_dir)
     print(total_chi2, total_deg_of_freedom)
     total_deg_of_freedom -= len(param_set.keys())
