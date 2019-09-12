@@ -259,7 +259,7 @@ if cont:
     print('Loading chromosome...')
     population_raw = np.load(popfile)
     x = np.loadtxt(mutfile)
-    starting_generation, mutation_rate = x[-1]
+    starting_generation, mutation_rate = int(x[-1][0]), float(x[-1][1])
     try:
         shutil.rmtree('/'.join([object_name, 'Output', str(starting_generation).zfill(4)]))
         x = glob.glob('/'.join([object_name, 'Run', '*_*']))
