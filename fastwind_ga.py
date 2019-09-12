@@ -43,7 +43,7 @@ def read_ini_file(object_name):
         params = GA.Parameters()
         for i in range(len(param_names)):
             lower, upper, step = data[i + num_lines*5+4][:-1].split(' ')
-            print(np.ceil(np.log10(abs(float(upper) - float(lower)))))
+            #print(np.ceil(np.log10(abs(float(upper) - float(lower)))))
             sig_digits = np.ceil(np.log10(abs(float(upper) - float(lower)))) - np.floor(np.log10(float(step)))
             sig_digits += 2
             if np.log10(abs(float(upper) - float(lower)))%1 == 0:
@@ -184,7 +184,7 @@ def run_fastwind(run_dir, output_dir, lines_dic, Z, param_set):
     shutil.rmtree(out_mod_dir)
 
     shutil.rmtree(model_dir)
-    print(total_chi2, total_deg_of_freedom)
+    #print(total_chi2, total_deg_of_freedom)
     total_deg_of_freedom -= len(param_set.keys())
     total_chi2 /= (total_deg_of_freedom)
     fitness = 1./total_red_chi2 * len(lines_dic.keys())
@@ -299,7 +299,7 @@ for generation in range(starting_generation, number_of_generations):
         np.savetxt(f, np.array(gen_fitnesses), fmt='%s')
 
     fitness = np.array(np.array(gen_fitnesses)[:,-1*number_of_lines -1], dtype='float')
-    print(fitness)
+    #print(fitness)
     population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
     mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness)
 
