@@ -274,7 +274,7 @@ else:
     np.savetxt(output_dir + '/params.txt', np.array([[params[i].name, params[i].min, params[i].max, params[i].precision] for i in params.keys()]), fmt='%s')
 
     with open(outfile, 'w') as f:
-        f.write('#' + ' '.join(params.keys()) + ' run_id chi2 fitness ' + ' '.join(lines_dic.keys()))
+        f.write('#' + ' '.join(params.keys()) + ' run_id chi2 fitness ' + ' '.join(lines_dic.keys()) + '\n')
 
     with open(mutfile, 'w') as f:
         f.write('#Generation Mutation_rate\n')
