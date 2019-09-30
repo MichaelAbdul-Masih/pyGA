@@ -25,8 +25,8 @@ def crossover_raw(pop_pre_crossover, fitness):
     crossover_location = np.random.choice(chromosome_length, (len(combinations), 2))
     new_population = []
     for i in range(len(combinations)):
-        if crossover_chance[i][0] >= 0.15:
-            if crossover_chance[i][1] >= 0.5:
+        if crossover_chance[i][0] <= 0.85:
+            if crossover_chance[i][1] <= 0.85/2:
                 child1 = combinations[i][0][:crossover_location[i][0]] + combinations[i][1][crossover_location[i][0]:]
                 child2 = combinations[i][1][:crossover_location[i][0]] + combinations[i][0][crossover_location[i][0]:]
             else:
@@ -45,7 +45,8 @@ def crossover_raw(pop_pre_crossover, fitness):
 def crossover_and_mutate_raw(population_raw, fitness, mutation_rate):
     crossover_pop = crossover_raw(population_raw, fitness)
     mutated_pop = mutation_raw_all(crossover_pop, mutation_rate)
-    return mutated_pop
+    creep_pop = creep_mutation_raw_all(mutated_pop, mutation_rate)
+    return creep_pop
 
 
 def crossover_and_mutate(population_raw, fitness, precision):
@@ -69,6 +70,24 @@ def mutation_raw_all(crossover_pop, mutation_rate = 0.25):
     crossover_pop = np.array([''.join(i) for i in cross_array])
 
     return crossover_pop
+
+
+def creep_mutation_raw_all(mutated_pop, mutation_rate = 0.25):
+    chromosome_length = len(mutated_pop[0])
+    creep_pop = [i for i in  mutated_pop]
+    creep_pop = np.array(creep_pop, dtype='str')
+    creep_chance = np.random.rand(len(mutated_pop), chromosome_length)
+    creep_adjustment = np.random.choice(2, (len(mutated_pop), chromosome_length)) * 2 - 1
+    for individual_number in range(len(mutated_pop)):
+        individual_longint = long(creep_pop[individual_number])
+        for locus in range(chromosome_length):
+            if creep_chance[individual_number][locus] <= mutation_rate:
+                individual_longint += long(creep_adjustment[individual_number][locus] * 10 ** (chromosome_length - locus-1))
+        if individual_longint >= long(10 ** (chromosome_length)): individual_longint -= long(10 ** (chromosome_length))
+        elif individual_longint < 0: individual_longint += long(10 ** (chromosome_length))
+        creep_pop[individual_number] = str(individual_longint).zfill(chromosome_length)
+        #creep_pop[individual_number] = str(abs(individual_longint)).zfill(chromosome_length)[-1*chromosome_length:]
+    return creep_pop
 
 
 def adjust_mutation_rate(mutation_rate, fitnesses, fit_metric_min=0.05, fit_metric_max=0.25, delta=1.5):
