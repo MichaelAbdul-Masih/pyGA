@@ -149,7 +149,7 @@ def run_fastwind(run_dir, output_dir, lines_dic, Z, param_set):
     if len(lines) <= 1:
         param_list_return.append(999999999)
         param_list_return.append(0.0)
-        param_list_return.extend(np.zeros_like(lines_dic.keys()))
+        param_list_return.extend(np.zeros_like(list(lines_dic.keys()),dtype='float'))
         shutil.rmtree(model_dir)
         print('failed: ' + param_set['run_id'])
         return param_list_return
