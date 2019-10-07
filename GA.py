@@ -6,8 +6,14 @@ from schwimmbad import MPIPool
 
 
 
-def crossover_raw(pop_pre_crossover, fitness):
-    probabilities = fitness / np.sum(fitness)
+def crossover_raw(pop_pre_crossover, fitness, prob_type = 'rank'):
+    if prob_type == 'rank':
+        pop_size = len(fitness)
+        probabilities = 2. * (pop_size + 1) - 2*(np.argsort(fitness)[::-1])
+        probabilities = probabilities / np.sum(probabilities)
+    elif prob_type == 'fitness':
+        probabilities = fitness / np.sum(fitness)
+        
     chromosome_length = len(pop_pre_crossover[0])
 
     indicies = range(len(pop_pre_crossover))
