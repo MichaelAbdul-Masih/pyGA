@@ -300,17 +300,21 @@ for generation in range(starting_generation, number_of_generations):
 
     fitness = np.array(np.array(gen_fitnesses)[:,-1*number_of_lines -1], dtype='float')
     #print(fitness)
+    if np.max(fitness) > best_fitness:
+        best_fitness = np.max(fitness)
+        best_mod = population[np.argmax(fitness)]
+        best_mod_raw = population_raw[np.argmax(fitness)]
+    elif best_mod_raw != population_raw[np.argmax(fitness)]:
+        population_raw = np.delete(population_raw, np.argmin(fitness))
+        population_raw = np.append(population_raw, best_mod_raw)
+    best_mods.append(best_mod)
+
     population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
     mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness)
 
     np.save(popfile, np.array(population_raw))
     with open(mutfile, 'a') as f:
         f.write(' '.join([str(generation + 1), str(mutation_rate)]) + '\n')
-
-    if np.max(fitness) > best_fitness:
-        best_fitness = np.max(fitness)
-        best_mod = population[np.argmax(fitness)]
-    best_mods.append(best_mod)
 
     gen_time = time.time()
     print('Since start: ' + str(gen_time - start_time_prog))
