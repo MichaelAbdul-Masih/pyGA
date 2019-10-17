@@ -13,7 +13,7 @@ def crossover_raw(pop_pre_crossover, fitness, prob_type = 'rank'):
         probabilities = probabilities / np.sum(probabilities)
     elif prob_type == 'fitness':
         probabilities = fitness / np.sum(fitness)
-        
+
     chromosome_length = len(pop_pre_crossover[0])
 
     indicies = range(len(pop_pre_crossover))
@@ -96,9 +96,8 @@ def creep_mutation_raw_all(mutated_pop, mutation_rate = 0.25):
     return creep_pop
 
 
-def adjust_mutation_rate(mutation_rate, fitnesses, fit_metric_min=0.05, fit_metric_max=0.25, delta=1.5):
-    mut_rate_min = .0005
-    mut_rate_max = .25
+def adjust_mutation_rate(mutation_rate, fitnesses, fit_metric_min=0.05, fit_metric_max=0.25, mut_rate_min = .0005,
+mut_rate_max = .25, delta=1.5):
     fitness_metric = abs(np.max(fitnesses) - np.median(fitnesses)) / (np.max(fitnesses) + np.median(fitnesses))
 
     if fitness_metric <= fit_metric_min:

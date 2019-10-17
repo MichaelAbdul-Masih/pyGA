@@ -119,9 +119,21 @@ def create_INDAT_file(run_dir, param_set, metallicity):
         f.write(' 1.000       0.1 0.2\n')
 
         C = param_set['C']
+        if C != -1:
+            f.write('C    ' + str(C) + '\n')
         N = param_set['N']
+        if N != -1:
+            f.write('N    ' + str(N) + '\n')
         O = param_set['O']
-        f.write('\n'.join(['C    ' + str(C), 'N    ' + str(N), 'O    ' + str(O)]) + '\n')
+        if O != -1:
+            f.write('O    ' + str(O) + '\n')
+        Si = param_set['Si']
+        if Si != -1:
+            f.write('Si    ' + str(Si) + '\n')
+        P = param_set['P']
+        if P != -1:
+            f.write('P    ' + str(P) + '\n')
+        # f.write('\n'.join(['C    ' + str(C), 'N    ' + str(N), 'O    ' + str(O)]) + '\n')
 
 
 
@@ -253,7 +265,7 @@ popfile = output_dir + '/raw_pop.npy'
 
 
 starting_generation = 0
-mutation_rate = 0.005
+mutation_rate = 0.05
 
 if cont:
     print('Loading chromosome...')
@@ -310,7 +322,7 @@ for generation in range(starting_generation, number_of_generations):
     best_mods.append(best_mod)
 
     population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
-    mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness)
+    mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness, mut_rate_min = .005)
 
     np.save(popfile, np.array(population_raw))
     with open(mutfile, 'a') as f:
