@@ -2,8 +2,10 @@ import numpy as np
 import math
 from collections import OrderedDict
 from schwimmbad import MPIPool
+import sys
 
-
+if sys.version_info > (3,):
+    long = int
 
 
 def crossover_raw(pop_pre_crossover, fitness, prob_type = 'rank'):

@@ -129,10 +129,10 @@ def create_INDAT_file(run_dir, param_set, metallicity):
             f.write('O    ' + str(O) + '\n')
         Si = param_set['Si']
         if Si != -1:
-            f.write('Si    ' + str(Si) + '\n')
-        P = param_set['P']
-        if P != -1:
-            f.write('P    ' + str(P) + '\n')
+            f.write('SI    ' + str(Si) + '\n')
+        # P = param_set['P']
+        # if P != -1:
+        #     f.write('P    ' + str(P) + '\n')
         # f.write('\n'.join(['C    ' + str(C), 'N    ' + str(N), 'O    ' + str(O)]) + '\n')
 
 
