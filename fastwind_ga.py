@@ -322,7 +322,7 @@ for generation in range(starting_generation, number_of_generations):
     best_mods.append(best_mod)
 
     population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
-    mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness, fit_metric_min=0.1, fit_metric_max=0.35 mut_rate_min = .0005)
+    mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness, mut_rate_min = .0005)
 
     np.save(popfile, np.array(population_raw))
     with open(mutfile, 'a') as f:

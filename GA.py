@@ -11,7 +11,9 @@ if sys.version_info > (3,):
 def crossover_raw(pop_pre_crossover, fitness, prob_type = 'rank'):
     if prob_type == 'rank':
         pop_size = len(fitness)
-        probabilities = 2. * (pop_size + 1) - 2*(np.argsort(fitness)[::-1])
+        ind = np.argsort(fitness)[::-1]
+        ranks = [np.where(ind == i)[0][0] for i in range(len(ind))]
+        probabilities = 2. * (pop_size + 1) - 2*(ranks)
         probabilities = probabilities / np.sum(probabilities)
     elif prob_type == 'fitness':
         probabilities = fitness / np.sum(fitness)
