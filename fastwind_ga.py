@@ -11,6 +11,7 @@ from collections import OrderedDict
 # from PyAstronomy.pyasl import rotBroad, instrBroadGaussFast
 from subprocess import Popen, PIPE
 import getopt
+import re
 
 
 def create_GA_directory(object_name, cont = False):
@@ -32,17 +33,17 @@ def read_ini_file(object_name):
         data = f.readlines()
         num_lines = int(data[2][:-1])
         for i in range(num_lines):
-            line_name, resolution = data[i*5 + 3][:-1].split(' ')
-            lower_bound, upper_bound = data[i*5 + 4][:-1].split(' ')
+            line_name, resolution = re.split(r'\s+', data[i*5 + 3][:-1])
+            lower_bound, upper_bound = re.split(r'\s+', data[i*5 + 4][:-1])
             gamma = data[i*5 + 5][:-1]
-            norm_w1, norm_y1, norm_w2, norm_y2 = data[i*5 + 6][:-1].split(' ')
+            norm_w1, norm_y1, norm_w2, norm_y2 = re.split(r'\s+', data[i*5 + 6][:-1])
             line_dic = {'line_name':line_name, 'resolution':int(resolution), 'lower_bound':float(lower_bound), 'upper_bound':float(upper_bound), 'gamma':float(gamma), 'norm_w1':float(norm_w1), 'norm_y1':float(norm_y1), 'norm_w2':float(norm_w2), 'norm_y2':float(norm_y2)}
             lines_dic[line_name] = line_dic
 
         param_names = ['teff', 'logg', 'mdot', 'vinf', 'beta', 'He', 'micro', 'vrot', 'macro', 'N', 'C', 'O', 'Si', 'P']
         params = GA.Parameters()
         for i in range(len(param_names)):
-            lower, upper, step = data[i + num_lines*5+4][:-1].split(' ')
+            lower, upper, step = re.split(r'\s+', data[i + num_lines*5+4][:-1])
             #print(np.ceil(np.log10(abs(float(upper) - float(lower)))))
             sig_digits = np.ceil(np.log10(abs(float(upper) - float(lower)))) - np.floor(np.log10(float(step)))
             sig_digits += 2
@@ -310,7 +311,7 @@ for generation in range(starting_generation, number_of_generations):
     with open(outfile, 'a') as f:
         np.savetxt(f, np.array(gen_fitnesses), fmt='%s')
 
-    fitness = np.array(np.array(gen_fitnesses)[:,-1*number_of_lines -1], dtype='float')
+    fitness = np.array(np.array(gen_fitnesses)[:,-1*number_of_lines-1], dtype='float')
     #print(fitness)
     if np.max(fitness) > best_fitness:
         best_fitness = np.max(fitness)
