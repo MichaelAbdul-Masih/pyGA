@@ -183,7 +183,7 @@ def create_chromosome(parameters, population_size):
 
 
 def translate_chromosome(parameters, chromosome):
-   """
+    """
     Translate the input chromosome for a model into useable parameter values for the model input file.
     """
     '''Must provide the parameters, param_set from read_ini_file function, and chromosomes generally named with a 'raw' suffix eg population_raw'''
