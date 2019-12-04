@@ -21,6 +21,7 @@ from collections import OrderedDict
 # from PyAstronomy.pyasl import rotBroad, instrBroadGaussFast
 from subprocess import Popen, PIPE
 import getopt
+import re
 
 
 def create_GA_directory(object_name, cont = False):
