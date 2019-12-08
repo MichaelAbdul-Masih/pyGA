@@ -88,7 +88,7 @@ def read_ini_file(object_name):
             params = GA.Parameters()
             constants = {}
             for i in range(len(param_names)):
-                lower, upper, step = re.split(r'\s+', data[i + num_lines*5+4][:-1])
+                lower, upper, step, comment = re.split(r'\s+', data[i + num_lines*5+4][:-1])
 
                 if float(step) <= 0.0:
                     constants[param_names[i]] = float(lower)
