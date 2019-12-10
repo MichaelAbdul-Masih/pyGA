@@ -57,7 +57,7 @@ def main():
     # Write output file
     out_f = open(arguments.fileName + ".fin", 'w')
     out_f.write("#" + str(len(wlc)) + "\t" + "#0 \n")
-    for i in range(len(wlc)):
+    for i in range(len(wlc)-1):
         out_f.write(str(wlc[i]) + "\t" + str(flux[i]) + "\n")
     out_f.close()
     exit()
@@ -111,8 +111,8 @@ def macroBroad(xdata, ydata, vmacro):
     profile = ccr * (np.exp(-pxmr ** 2) + sq_pi * pxmr * (erf(pxmr) - 1.0))
 
     # Extend the xy axes to avoid edge-effects
-    before = ydata[-profile.size / 2 + 1:]
-    after = ydata[:profile.size / 2]
+    before = ydata[int(-profile.size / 2 + 1):]
+    after = ydata[:int(profile.size / 2)]
     extended = np.r_[before, ydata, after]
 
     first = xdata[0] - float(int(profile.size / 2.0 + 0.5)) * xspacing
