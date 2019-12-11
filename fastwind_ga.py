@@ -7,7 +7,6 @@ michael.abdulmasih@kuleuven.be
 calum.hawcroft@kuleuven.be
 '''
 
-#this is a new comment
 import numpy as np
 import pyGA as GA
 import shutil
@@ -242,7 +241,8 @@ def run_fastwind(run_dir, output_dir, constants, lines_dic, param_set):
     try:
         os.system('timeout 1h ./pnlte_A10HHeNCOPSi.eo > temp.txt')
         # os.system('timeout 1h ./pnlte_A10HHeNCOPSi.eo > /dev/null')
-        np.savetxt('temp1.txt', np.array([param_set['run_id'], '15.0 0.1', '0']), fmt='%s')
+        micro = str(assign_param('micro', param_set, constants))
+        np.savetxt('temp1.txt', np.array([param_set['run_id'], micro + '0.1', '0']), fmt='%s')
         os.system('./pformalsol_A10HHeNCOPSi.eo < temp1.txt > temp2.txt')
         # r = Popen('./pformalsol_A10HHeNCOPSi.eo > temp.txt', stdin=PIPE)
         # r.communicate(os.linesep.join([param_set['run_id'], '15.0 0.1', '0']))
@@ -288,9 +288,9 @@ def run_fastwind(run_dir, output_dir, constants, lines_dic, param_set):
     #The try:except here is to remove any models which produce incorrect line profiles, liekly due to a bug in FASTWIND.
     for line in lines_dic.keys():
         new_line_file_name = model_dir + '/' + param_set['run_id'] + '/' + line + '.prof'
-        macro = assign_param('macro', param_set, constants)
-        vrot = assign_param('vrot', param_set, constants)
-        broaden = os.system('timeout 5m python broaden.py -f ' + new_line_file_name + ' -r ' + str(lines_dic[line]['resolution']) + ' -v ' + str(vrot) + ' -m ' + str(macro))
+        macro = str(assign_param('macro', param_set, constants))
+        vrot = str(assign_param('vrot', param_set, constants))
+        broaden = os.system('timeout 5m python broaden.py -f ' + new_line_file_name + ' -r ' + str(lines_dic[line]['resolution']) + ' -v ' + vrot + ' -m ' + macro)
         if broaden == 0:
             chi2, dof = calculate_chi2(new_line_file_name + '.fin', lines_dic[line])
             total_chi2 += chi2
