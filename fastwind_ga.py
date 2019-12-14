@@ -199,11 +199,11 @@ def create_INDAT_file(run_dir, param_set, constants):
         f.write('   '.join([str(micro), str(Z)]) + ' T T\n')
         f.write(' T F           1           2\n')
 
-        if fcl == -1:
+        if float(fcl) == -1:
             f.write(' 1.000       0.1 0.2\n')
-        elif fic == -1:
+        elif float(fic) == -1:
             f.write(' ' + str(fcl) + '      0.5000E-01  0.1000\n')
-        elif fic != -1:
+        elif float(fic) != -1:
             f.write(' THICK\n')
             f.write(' '.join([str(fcl), str(vcl), str(vclmax)]) + '\n')
             f.write(' '.join([str(fic), str(vcl), str(vclmax)]) + '\n')
@@ -213,7 +213,7 @@ def create_INDAT_file(run_dir, param_set, constants):
         if float(C) >= 0:
             f.write('C    ' + str(C) + '\n')
 
-        if float(O) >= 0:
+        if float(N) >= 0:
             f.write('N    ' + str(N) + '\n')
 
         if float(O) >= 0:
