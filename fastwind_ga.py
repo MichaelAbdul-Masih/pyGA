@@ -143,7 +143,7 @@ def assign_param(par, param_set, constants):
     """
     '''Must give a parameter name you are interested in, eg teff or logg. Give parameter set and list of constants, created by the read_ini_file function.'''
     if par in param_set.keys():
-        print(param_set[par])
+        # print(param_set[par])
         value = param_set[par]
     else:
         value = str(constants[par])
@@ -346,6 +346,7 @@ def calculate_chi2(exp_fname, line_dic):
     chi2 = np.sum(((observed_flux - expected_flux) / observed_err)**2)
     deg_of_freedom = len(observed_wave)
     return chi2, deg_of_freedom
+
 #Returns a chi2 for the fit of the model profile to observed profile. Also gives the degrees of freedom for the chi2.
 
 #This is the MPI Pool, needed to communicate between nodes on HPC. Or between cores on any system.
