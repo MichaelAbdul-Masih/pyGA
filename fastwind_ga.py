@@ -242,7 +242,8 @@ def run_fastwind(run_dir, output_dir, constants, lines_dic, param_set):
     try:
         os.system('timeout 1h ./pnlte_A10HHeNCOPSi.eo > temp.txt')
         # os.system('timeout 1h ./pnlte_A10HHeNCOPSi.eo > /dev/null')
-        np.savetxt('temp1.txt', np.array([param_set['run_id'], '15.0 0.1', '0']), fmt='%s')
+        micro = assign_param('micro', param_set, constants)
+        np.savetxt('temp1.txt', np.array([param_set['run_id'], str(micro) + ' 0.1', '0']), fmt='%s')
         os.system('./pformalsol_A10HHeNCOPSi.eo < temp1.txt > temp2.txt')
         # r = Popen('./pformalsol_A10HHeNCOPSi.eo > temp.txt', stdin=PIPE)
         # r.communicate(os.linesep.join([param_set['run_id'], '15.0 0.1', '0']))
