@@ -63,15 +63,15 @@ datapath = '/Users/sarah/pyGA/'
 full_short_manual = 'manual'
 
 # If full_short_manual is set to 'manual'
-make_run_summary = False
+make_run_summary = True
 make_fitnessdistribution_plot = False
 make_fitnessdistribution_per_line_plot = False
 make_chi2pgen_plot = False
 make_lineprofiles_plot = False # Will take a long time depending on how many models are included.
 make_correlation_plot = False # will always be done when make_correlation_per_line_plot = True
 make_correlation_per_line_plot = False # This takes a lot of time
-make_param_dist_plot = True
-make_param_dist_plot_detail = True
+make_param_dist_plot = False
+make_param_dist_plot_detail = False
 
 # Videos (in full or manual only)
 make_paramspace_avi = False
@@ -387,24 +387,26 @@ if make_run_summary or full_short_manual in ('short', 'full'):
     fz = 12
     fz_err = 10
 
+    numround = 3
+
     pls = 1./maxfreepar
     for lp in range(len(param_keys)):
         strpname = param_keys[lp]
-        strbestp = str(params_error[param_keys[lp]][2])
-        strdiffmin = str(params_error[param_keys[lp]][2] - params_error[param_keys[lp]][0])
-        strdiffplus =  str(params_error[param_keys[lp]][1] - params_error[param_keys[lp]][2])
+        strbestp = str(round(params_error[param_keys[lp]][2],numround))
+        strdiffmin = str(round(params_error[param_keys[lp]][2] - params_error[param_keys[lp]][0],numround))
+        strdiffplus =  str(round(params_error[param_keys[lp]][1] - params_error[param_keys[lp]][2],numround))
         strrange = ('[' + str(params_error[param_keys[lp]][0]) + ', '
             +  str(params_error[param_keys[lp]][1]) + ']')
 
         ax[0].text(0.05, 1.-pls-lp*ew*pls, strpname, transform=ax[0].transAxes, fontsize=fz, va='top')
-        ax[0].text(0.40, 1.-pls-lp*ew*pls, strbestp, transform=ax[0].transAxes, fontsize=fz, va='top', ha='right')
+        ax[0].text(0.35, 1.-pls-lp*ew*pls, strbestp, transform=ax[0].transAxes, fontsize=fz, va='top', ha='right')
 
         hpls = pls*0.25
-        ax[0].text(0.42, (1.-pls-lp*ew*pls)+hpls, '+', transform=ax[0].transAxes, fontsize=fz_err, va='top')
-        ax[0].text(0.42, (1.-pls-lp*ew*pls)-hpls, '-', transform=ax[0].transAxes, fontsize=fz_err, va='top')
-        ax[0].text(0.45, (1.-pls-lp*ew*pls)+hpls, strdiffmin, transform=ax[0].transAxes, fontsize=fz_err, va='top')
-        ax[0].text(0.45, (1.-pls-lp*ew*pls)-hpls, strdiffplus, transform=ax[0].transAxes, fontsize=fz_err, va='top')
-        ax[0].text(0.55, 1.-pls-lp*ew*pls, strrange, transform=ax[0].transAxes, fontsize=fz_err, va='top')
+        ax[0].text(0.37, (1.-pls-lp*ew*pls)+hpls, '+', transform=ax[0].transAxes, fontsize=fz_err, va='top')
+        ax[0].text(0.37, (1.-pls-lp*ew*pls)-hpls, '-', transform=ax[0].transAxes, fontsize=fz_err, va='top')
+        ax[0].text(0.40, (1.-pls-lp*ew*pls)+hpls, strdiffmin, transform=ax[0].transAxes, fontsize=fz_err, va='top')
+        ax[0].text(0.40, (1.-pls-lp*ew*pls)-hpls, strdiffplus, transform=ax[0].transAxes, fontsize=fz_err, va='top')
+        ax[0].text(0.60, 1.-pls-lp*ew*pls, strrange, transform=ax[0].transAxes, fontsize=fz_err, va='top')
 
     run_info_labels = []
     run_info_data = []
