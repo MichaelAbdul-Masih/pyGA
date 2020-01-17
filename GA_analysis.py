@@ -45,8 +45,8 @@ import img2pdf # for saving the scatter plots (fitness vs parameter) in
 # The line profiles per model should either be in the 0000_0000.tar.gz archive,
 # or alternatively if already unpacked, the line profiles should be in a folder
 # names 0000_0000 in the parent directory 0000. (example numbers)
-outpath = '/Users/sarah/Dropbox/projects/zeta_per_model/ga_analysis/ga_output/'
-datapath = '/Users/sarah/pyGA/'
+outpath = ''
+datapath = ''
 
 ''' ------------------------------------------'''
 '''      which plots do you want to make?     '''
@@ -60,7 +60,7 @@ datapath = '/Users/sarah/pyGA/'
 # 'full' =  all possible plots (will take a while)
 # 'short' = does not generate correlation and fitness plots per line
 # 'manual' = only selected plots, to be specified below
-full_short_manual = 'manual'
+full_short_manual = 'short'
 
 # If full_short_manual is set to 'manual'
 make_run_summary = True
