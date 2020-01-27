@@ -2,6 +2,10 @@
 !Inputs/
 Inputs/*
 !Inputs/.gitkeep
+!Setup/
+Setup/*
+!Setup/GA_setup.py
+!Setup/GA_clipping.py
 inicalc/
 command_to_run
 *.pbs
