@@ -393,8 +393,8 @@ if make_run_summary or full_short_manual in ('short', 'full'):
     for lp in range(len(param_keys)):
         strpname = param_keys[lp]
         strbestp = str(round(params_error[param_keys[lp]][2],numround))
-        strdiffmin = str(round(params_error[param_keys[lp]][2] - params_error[param_keys[lp]][0],numround))
-        strdiffplus =  str(round(params_error[param_keys[lp]][1] - params_error[param_keys[lp]][2],numround))
+        strdiffplus = str(round(params_error[param_keys[lp]][2] - params_error[param_keys[lp]][0],numround))
+        strdiffmin =  str(round(params_error[param_keys[lp]][1] - params_error[param_keys[lp]][2],numround))
         strrange = ('[' + str(params_error[param_keys[lp]][0]) + ', '
             +  str(params_error[param_keys[lp]][1]) + ']')
 
