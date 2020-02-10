@@ -537,7 +537,7 @@ if (make_param_dist_plot or make_param_dist_plot_detail or
                     paramcount = paramcount + 1
                     if paramcount <= nparams:
                         sns.violinplot( x=x_subpage['gen_id'], y=x_subpage[param_keys[v_param_pp*npage+i]],
-                        linewidth=0.1, scale='width', ax=ax[i])
+                        linewidth=0.1, scale='width', ax=ax[i], cut=0)
                     else:
                         ax[i].axis('off')
 
