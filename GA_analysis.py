@@ -577,7 +577,6 @@ if (make_param_dist_plot or make_param_dist_plot_detail or
     # Remove the individual pages after the file has been merged.
     for filename in line_pdf_names:
         os.system("rm " + filename)
-    sys.exit()
 
 if make_chi2pgen_plot or full_short_manual in ('short', 'full'):
     print("Making chi2 as a function of generation plots ...")
