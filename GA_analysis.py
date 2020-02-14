@@ -153,8 +153,8 @@ name_correlation_per_line_plot = "7_correlation_perline_GAreport.pdf"
 name_param_dist_zoom_plot = "8_param_dist_zoom_GAreport.pdf"
 
 
-def calculateP(params, lc, chi2, normalize = False):
-    degreesFreedom = len(lc) - len(params)
+def calculateP(params, nspec, chi2, normalize = False):
+    degreesFreedom = nspec - len(params)
     if normalize:
         scaling = np.min(chi2)
     else: scaling = 1
@@ -164,7 +164,7 @@ def calculateP(params, lc, chi2, normalize = False):
         probs[i] = stats.chi2.sf(chi2[i], degreesFreedom)
     return probs
 
-def parallelcrop(list1, list2, start_list1, stop_list1, list3='', list4=''):
+def parallelcrop(list1, list2, start_list1, stop_list1, list3=[], list4=[]):
 
     list1 = np.array(list1)
     list2 = np.array(list2)
@@ -175,9 +175,9 @@ def parallelcrop(list1, list2, start_list1, stop_list1, list3='', list4=''):
     newlist1 = list1[minarg:maxarg]
     newlist2 = list2[minarg:maxarg]
 
-    if list3 != '':
+    if list3 != []:
         newlist3 = list3[minarg:maxarg]
-        if list4 != '':
+        if list4 != []:
             newlist4 = list4[minarg:maxarg]
             return newlist1, newlist2, newlist3, newlist4
         else:
@@ -256,31 +256,6 @@ if len(mutationpergen) != len(median_chi2_per_gen):
     mutationpergen = mutationpergen[:-difflen]
 generation, mutation = mutationpergen.T
 
-''' Normfile path, parameter file read in, P value calculation'''
-normpath = datapath + runname + '.norm'
-normspectrum = np.loadtxt(normpath)
-
-params = np.loadtxt(datapath_output + 'params.txt', dtype='str')
-
-min_redchi2_value = min(x['chi2'])
-print('Min chi2: ' + str(min_redchi2_value))
-
-probabilities = calculateP(params, normspectrum, x['chi2'], True)
-x = x.assign(P=probabilities)
-
-params_dic = OrderedDict()
-params_error = OrderedDict()
-
-min_p = 0.05
-best = pd.Series.idxmax(x['P'])
-ind = x['P'] > min_p
-
-for i in params:
-    params_dic[i[0]] = [float(i[1]), float(i[2])]
-    params_error[i[0]] = [min(x[i[0]][ind]), max(x[i[0]][ind]), x[i[0]][best]]
-
-param_keys = params_dic.keys()
-
 ''' Get linelist from inifile '''
 
 inifile = datapath + 'pfw_' + run[:-1] + '.ini'
@@ -326,6 +301,42 @@ for i, line in enumerate(fini):
             line_norm_rightval.append(float(l4))
             counter = counter + 1
 fini.close()
+
+''' Normfile path read in '''
+normpath = datapath + runname + '.norm'
+normspectrum = np.loadtxt(normpath)
+
+normspec_wave, normspec_flux, normspec_err = normspectrum.T
+
+''' Determine spectrum length '''
+specpoints = 0
+for i in range(len(line_norm_starts)):
+    npoints_line = len(parallelcrop(normspec_wave, normspec_flux,
+        line_norm_starts[i], line_norm_stops[i], normspec_err)[0])
+    specpoints = specpoints + npoints_line
+
+''' P value calculation'''
+
+params = np.loadtxt(datapath_output + 'params.txt', dtype='str')
+
+min_redchi2_value = min(x['chi2'])
+print('Min chi2: ' + str(min_redchi2_value))
+
+probabilities = calculateP(params, specpoints, x['chi2'], True)
+x = x.assign(P=probabilities)
+
+params_dic = OrderedDict()
+params_error = OrderedDict()
+
+min_p = 0.05
+best = pd.Series.idxmax(x['P'])
+ind = x['P'] > min_p
+
+for i in params:
+    params_dic[i[0]] = [float(i[1]), float(i[2])]
+    params_error[i[0]] = [min(x[i[0]][ind]), max(x[i[0]][ind]), x[i[0]][best]]
+
+param_keys = params_dic.keys()
 
 ''' Loading extra spectra '''
 
@@ -577,7 +588,6 @@ if (make_param_dist_plot or make_param_dist_plot_detail or
     # Remove the individual pages after the file has been merged.
     for filename in line_pdf_names:
         os.system("rm " + filename)
-    sys.exit()
 
 if make_chi2pgen_plot or full_short_manual in ('short', 'full'):
     print("Making chi2 as a function of generation plots ...")
@@ -687,6 +697,8 @@ if make_chi2pgen_plot or full_short_manual in ('short', 'full'):
 ''' ------------------------------------------'''
 '''   Plot fitness as function of parameter   '''
 ''' ------------------------------------------'''
+
+
 if make_fitnessdistribution_plot or full_short_manual in ('short', 'full'):
 
     print("Making fitness vs parameter plots...")
