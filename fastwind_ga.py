@@ -456,7 +456,7 @@ for generation in range(starting_generation, number_of_generations):
         population_raw = np.append(population_raw, best_mod_raw)
     best_mods.append(best_mod)
 #With results of fitness from previous generation the next generation is created.
-    population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
+    population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, params, mutation_rate)
 #Mutuation rate is adjust based on mutation rate of previous generation, to maximise effectiveness of exploration.
     mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness, mut_rate_min = .005)
 #save the new sets of raw chromosomes for the population a textfile.
