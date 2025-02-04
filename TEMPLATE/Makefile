@@ -1,5 +1,5 @@
 # usage: make target atom=xyz or
-#        make target  
+#        make target
 #
 # version 2 (order of compilation for target formalsol changed)
 #
@@ -20,11 +20,17 @@
 ifdef atom
 ATOM=$(atom)
 else
-ATOM=A10HHeNCOPSi
 #ATOM=A10HHe
-#ATOM=A10HHeSi
 #ATOM=A10HHeN2345
-#ATOM=A10HHeP
+#ATOM=A10HHeCNO
+#ATOM=A10HHeSi
+#ATOM=A10HHeC_cms
+ATOM=A10HHeCnewNOSi
+#ATOM=A10HHeCNO_cms
+#
+#ATOM=A10HHeCnewNO
+#
+#ATOM=mu_atom
 endif
 
 ATOMFILE=$(ATOM).dat
@@ -32,67 +38,80 @@ INIDIR=../inicalc
 
 .SUFFIXES: .f90
 
-F90 = ifort
+F90 = gfortran
 
 #standard
-LD = ifort
-CFLAGS  = -w -c -O3 -mp -assume byterecl
+#from ifort v15, change -mp to -fp-model precise
+LD = gfortran
+CFLAGS  = -w -c -fno-automatic -O3
 
+# in case, flags below need to be adapted to gfortran (still for intel)
 # for profiling
 #LD = ifort -p
-#CFLAGS  = -w -c -O3 -mp -assume byterecl -p
+#CFLAGS  = -w -c -O3 -fp-model precise -assume byterecl -p
 
 #for traceback
-#CFLAGS  = -w -c -O3 -mp -assume byterecl -traceback
-#CFLAGS  = -w -c -O3 -mp -assume byterecl -traceback -fpe0
-#CFLAGS  = -w -c -O3 -mp -assume byterecl -traceback -fpe0 -check bounds
+#CFLAGS  = -w -c -O3 -fp-model precise -assume byterecl -traceback -fpe0
+
+#check bounds
+#CFLAGS  = -w -c -O0 -fp-model precise -assume byterecl -traceback -fpe0 -check bounds
 
 # for debugging
-CFLAGS_db  = -w -c -mp -assume byterecl -g
+#CFLAGS_db  = -w -c -fp-model precise -assume byterecl -g
 
-all: nlte_dim.o nlte formalsol totout
+all: nlte_dim.o nlte formalsol totout formalsol_spamms
 
-install: 
+install:
 	 cp $(INIDIR)/newprog/*.f90 .
-	 
-# the object files 
+
+# the object files
 OBJS1  = nlte_type.o ffr.o dimes.o
 
 OBJS2  = nlte_type.o nlte_dim.o princesa.o ffr.o nlte.o nlte_approx.o lambda_xray.o
 
-OBJS3  = nlte_type.o nlte_dim.o princesa.o ffr.o preformal.o formalsol.o formalsol_add.o
+OBJS3  = nlte_type.o nlte_dim.o princesa.o ffr.o preformal.o formalsol.o
+
 OBJS4  = nlte_type.o nlte_dim.o ffr.o totout.o
+
+OBJS5  = nlte_type.o nlte_dim.o princesa.o ffr.o preformal.o formalsol_spamms.o
 
 
 nlte_dim.o: $(OBJS1)
-	 $(LD) $(OBJS1) -o dimes.eo         	 
+	 $(LD) $(OBJS1) -o dimes.eo
 
-	 @ echo $(ATOMFILE) > ATOM_FILE 	 
-	 @ echo thom_new.dat >> ATOM_FILE 	 
-#	 @ echo LINES_N2345.dat >> ATOM_FILE 	 
-# for both A10HHe and A10HHeSi
-#	 @ echo LINES_Si.dat >> ATOM_FILE 	 
-	 @ echo LINES_Si.dat >> ATOM_FILE 	 
+	 @ echo $(ATOMFILE) > ATOM_FILE
+	 @ echo thom_new.dat >> ATOM_FILE
+# for both A10HHe and A10HHeSi and A10HHeCNO
+# improved coll. broadening
+#	 @ echo LINES_CNOSi_new_coll.dat >> ATOM_FILE
+	 @ echo mu_LINES_CnewNOSi_new_coll.dat >> ATOM_FILE
+
 	 ./dimes.eo
-         
-	 $(F90) $(CFLAGS) nlte_dim.f90         	 
+
+	 $(F90) $(CFLAGS) nlte_dim.f90
 
 nlte: $(OBJS2)
-	 $(LD) $(OBJS2) -o pnlte_$(ATOM).eo         	 
+	 $(LD) $(OBJS2) -o pnlte_$(ATOM).eo
 
 formalsol: $(OBJS3)
-	 $(LD) $(OBJS3) -o pformalsol_$(ATOM).eo         	 
+	 $(LD) $(OBJS3) -o pformalsol_$(ATOM).eo
 
 totout: $(OBJS4)
-	 $(LD) $(OBJS4) -o ptotout_$(ATOM).eo         	 
+	 $(LD) $(OBJS4) -o ptotout_$(ATOM).eo
+
+formalsol_spamms: $(OBJS5)
+	 $(LD) $(OBJS5) -o pformalsol_spamms_$(ATOM).eo         	 
+
+
+	 gfortran -w chain.f90 -o chain.eo
 
 
 # rule for object files
-.f90.o:		
+.f90.o:
 		$(F90) $(CFLAGS) $<
 
-clean:	
+clean:
 		rm -f *.o *~ *.mod \#*
 
-cleanall: 
-		rm -f *.eo *.o *~ *.mod \#*
+cleanall:
+		rm -f control*.dat *.eo *.o *~ *.mod \#*

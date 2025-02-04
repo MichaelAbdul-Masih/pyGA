@@ -20,7 +20,7 @@ CHARACTER*6, DIMENSION(ID_LLEVS+2) :: LABL
 INTEGER(I4B) ::  NALIN,NAT,NL,NLEVH21 !level no of H21 for AT
 INTEGER(I4B), DIMENSION(ID_LLEVS+2) :: LE
 
-LOGICAL AT, SRANGE1
+LOGICAL AT
 !----------------------------------------------------------------------
 !comnur
 !
@@ -45,12 +45,13 @@ END MODULE preformal_var
 !ccc                                                                cccc
 !ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 !
-SUBROUTINE PREFORMAL(FILE,NCOMP,LEVEL,LEVEU,LINENO,NSTARK,VTURB,YHE,BALMER_LEMKE,SRANGE)
+SUBROUTINE PREFORMAL(FILE,NCOMP,LEVEL,LEVEU,LINENO,NSTARK,VTURB,YHE, &
+                     BALMER_LEMKE, PB_LEMKE)
 !
 USE nlte_type
 USE nlte_dim
 USE fund_const, ONLY: PI
-USE preformal_var, ONLY: FPATH,NAT,NL,FL,GL,ZL,WEIGHT,ZEFF,IU,IOU,AT,NLEVH21,SRANGE1
+USE preformal_var, ONLY: FPATH,NAT,NL,FL,GL,ZL,WEIGHT,ZEFF,IU,IOU,AT,NLEVH21
 USE ffr_error
 IMPLICIT NONE
 !
@@ -151,17 +152,7 @@ IMPLICIT NONE
 !       version 6.2 may 2013: Stark-broadening from Lemke (1997) will be used
 !                   for H_Balmer lines if BALMER_LEMKE = .true.
 !
-!       version 7.0 july 2015: routines RDATOM, HALLCL, and IDENT renamed,
-!                   to RDATOM1, HALLCL1, and IDENT1,
-!                   because of inclusion and overlap with PRINCESA
-!                   subr. TRANSIC1: QCL = .FALSE. inserted
-!                                         (old bug, found in March 2015)
-!
-!       version 7.0.1 july 2016:
-!                   consistency with version 7.0 and 7.0.1 from standard_v10.4.1
-!                   inclusion of function IGENIO here (and no longer in formalsol_add.f90)
-!
-!                   in function HALLCL, correction for
+!       version 6.2.1 february 2015: in function HALLCL, correction for
 !                   atmospheric refraction only down to 2000 AA:
 !                   Additional IF statement to avoid that UV lines are
 !                   corrected for air.
@@ -170,33 +161,26 @@ IMPLICIT NONE
 !                   while specific non-H/He lines such as NV use wavelengths
 !                   from LINES.DAT as given (here: in vaccum).
 !
-!       NOTE on atmospheric refraction
-!       1. standard path: SRANGE ('spectral range') = .FALSE. 
-!                         lambda > 2000 A: refraction included
-!                         a) lines from LINES.DAT: lambda in air
-!                         b) ISO/ISO1 lines: lambda already in air
-!                         c) lines with wavelength from level energies:
-!                            corrected in HALL_CL
-!                         lambda < 2000 A: vacuum wavelength
-!                         a) lines from LINES.DAT: lambda in vacuum
-!                         b) ISO/ISO1 lines: thus far, only optical frequencies,
-!                            no re-correction required.
-!                            ATTENTION for future calculations!!!
-!                         c) lines with wavelength from level energies:
-!                            NOT corrected in HALL_CL
-!       2. spectral ranges: SRANGE = .TRUE.
-!                         ALL wavelengths in vacuum
-!                         a) lines from LINES.DAT: not used so far,
-!                            ATTENTION for future calculations!!!
-!                         b) ISO/ISO1 lines: lambda in air, re-corrected in PRESTARK
-!                         c) lines with wavelength from level energies:
-!                            NOT corrected in HALL_CL
+!       version 7.0 july 2016: routines RDATOM, HALLCL, and IDENT renamed,
+!                   to RDATOM1, HALLCL1, and IDENT1,
+!                   because of overlap with PRINCESA, and function IGENIO
+!                   included 
+!                   subr. TRANSIC1: QCL = .FALSE. inserted
+!                                         (old bug, found in March 2015)
+!
+!       version 7.0.1 july 2016:
+!                   consistency with version 7.0 and 7.0.1 from CMF-path
+!
+!       version 7.0.2 oct 2020: compatible with gfortran
+!
+!       version 7.0.3 nov 2022: potential Lemke broadening for
+!                   Paschen/Brackett lines (hydrogen) included
 !
 !       initializing data
 !     .. scalar arguments ..
 INTEGER(I4B) ::  NCOMP  
 REAL(DP) :: VTURB,YHE
-LOGICAL :: BALMER_LEMKE,SRANGE
+LOGICAL :: BALMER_LEMKE, PB_LEMKE
 !     ..
 !     .. array arguments ..
 INTEGER(I4B), DIMENSION(NCOMP) ::  LINENO, NSTARK  
@@ -224,7 +208,6 @@ ALLOCATE(FLU(NCOMP),GAMMAC(NCOMP),GAMMAL(NCOMP),XLAMB(NCOMP),SUMLO(NCOMP),SUMUP(
 ALLOCATE(NATOM(NCOMP),NLEVL(NCOMP),NLEVU(NCOMP),INDEX(NCOMP))
 ALLOCATE(LOW(NCOMP))
 
-SRANGE1=SRANGE
 RTABLE = .FALSE.  
 AT = .FALSE.  
 LOW = .FALSE.  
@@ -251,7 +234,7 @@ SUMUP=0.
 
 DO I =1,NCOMP
      IF (NSTARK(I).EQ.2 .OR. LINENO(I).NE.0) RTABLE = .TRUE.  ! works also for nstark=4
-     IF (NSTARK(I).EQ.3 .AND. LINENO(I).NE.0) STOP' NSTARK = 3 AND LINENO NE 0'
+     IF (NSTARK(I).EQ.3 .AND. LINENO(I).NE.0) STOP ' NSTARK = 3 AND LINENO NE 0'
      IF (NSTARK(I).LE.1 .AND. LINENO(I).EQ.1) AT=.TRUE. 
 END DO  
 
@@ -399,7 +382,8 @@ END DO
 PRINT *,'NUMBER OF STARK-COMPONENTS',NSUM  
 
 IF (NSUM.NE.0) &
-& CALL PRESTARK(FILE,NSUM,STAFIL,NCOMP,NLEVL,NLEVU,XLAMB,FLU,NSTARK,VTURB,YHE,BALMER_LEMKE)
+& CALL PRESTARK(FILE,NSUM,STAFIL,NCOMP,NLEVL,NLEVU,XLAMB,FLU,NSTARK,VTURB,YHE, &
+                BALMER_LEMKE,PB_LEMKE)
 !
 !------ output file ix.dat
 !
@@ -657,6 +641,7 @@ DATA TABLA/'RBB','CBB','RBX','CBX','CBS','CBF','RBF','RFF'/
    QCL = .FALSE.
    
 CALL FFRKEY(KEY,NC,RET)  
+
 IF (ON_ERROR(RET))  GOTO 250
 
 IF (KEY.EQ.'TY') THEN  
@@ -779,17 +764,18 @@ IF (QRT) THEN
 !  sumlo and sumup contain sum of (gi fij/gj/lambda^2) from all transitions
 !  downwards from lower and upper level. Needed to calculate Sum(Aji) for
 !  GAMMAL!
-!JO changed Sept. 2015; new version might be still erroneous, partic. for NSTARK=2
+!JO changed July 2016, following CMF-path (problem detected Sept. 2015)
+!   new version might be still erroneous, partic. for NSTARK=2
 !  -according to header, this works only for NSTARK=3 and NCOMP=1
 !  -as far as I can see, this works only if in the component list
 !   any upper and lower level does not appear more than once
 !   (which is usually the case for individual lines complexes).
-!  -does no longer work for 'range' calculations     
+!  (-does no longer work for 'range' calculations)     
 !  -in any case, GAMMAL only calculated for NSTARK=3
 !  -thus, seperate reading of oscillator strength
 !  (question: what about oscillator strength if NSTARK = 2 in old version???) 
 !       IF(NSTARK(I).NE.2 .AND. LINENO(I).EQ.0) THEN !old version
-       IF(NSTARK(I).EQ.3 .AND. LINENO(I).EQ.0) THEN !new version (Sept. 2015) 
+       IF(NSTARK(I).EQ.3 .AND. LINENO(I).EQ.0) THEN !new version (July. 2016) 
           IF (LABL(NNU).EQ.LEVEL(I)) THEN
             CALL FFRNUM(REALO,INTEG,RET)  
             IF (ON_ERROR(RET))  GOTO 250
@@ -811,6 +797,7 @@ IF (QRT) THEN
             NDATM = NDATOS - 1  
           ENDIF          
        ENDIF
+
 
        IF (KEY.EQ.LEVEU(I) .AND. LOW(I)) THEN  
                XLAMB(I) = WLC  
@@ -1048,7 +1035,7 @@ END DO
 
 IQISTART=1
 IF(AT) THEN
-  IF (NL.NE.ID_LLEVS+2) STOP' AT AND NL NE ID_LLEVS+2 IN TRANSIC2'
+  IF (NL.NE.ID_LLEVS+2) STOP ' AT AND NL NE ID_LLEVS+2 IN TRANSIC2'
   IQISTART=ID_LLEVS+1
 ENDIF
 
@@ -1200,7 +1187,7 @@ FUNCTION HALLCL1(II1,II2)
 !
 USE nlte_type
 USE nlte_dim
-USE preformal_var, ONLY: FL,SRANGE1
+USE preformal_var, ONLY: FL
 IMPLICIT NONE
 !
 !        calcula la longitud de onda central de una transicion rbb,
@@ -1235,7 +1222,7 @@ IF (ABS(HALLCL1-4388.82518552703d0).LT.1.D-10) HALLCL1 = 4389.16d0
 !
 !-----AVOID THAT UV LINES HAVE THEIR WAVELENGTHS CONVERGED TO AIR
 !-----CHANGE MADE BY Luiz Carneiro - 25/02/2015
-IF (SRANGE1.OR.HALLCL1.LE.2000.d0) RETURN
+IF (HALLCL1.LE.2000.d0) RETURN
 !
 !------CONVERSION TO WAVELENGTH IN AIR
 !
@@ -1288,11 +1275,12 @@ END
 !
 !ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 !
-SUBROUTINE PRESTARK(FILE,NSUM,STAFIL,NB,NLEVL,NLEVU,XLAMB,FLU,NSTARK,VTURB,YHE,BALMER_LEMKE)  
+SUBROUTINE PRESTARK(FILE,NSUM,STAFIL,NB,NLEVL,NLEVU,XLAMB,FLU,NSTARK,VTURB,YHE, &
+                    BALMER_LEMKE, PB_LEMKE)  
 !
 USE nlte_type
 USE nlte_dim
-USE preformal_var, ONLY: FPATH,LABL,LE,WEIGHT,IU,SRANGE1
+USE preformal_var, ONLY: FPATH,LABL,LE,WEIGHT,IU
 USE ffr_error
 IMPLICIT NONE
 !
@@ -1306,19 +1294,19 @@ INTEGER(I4B), PARAMETER :: MAXW=ID_MAXWW,MAXT=ID_MAXTT,MAXNE=ID_MAXNE, &
 !     .. scalar arguments ..
 INTEGER(I4B) ::  NB,NSUM  
 REAL(DP) :: VTURB,YHE
-LOGICAL :: BALMER_LEMKE
+LOGICAL :: BALMER_LEMKE, PB_LEMKE
 CHARACTER STAFIL*32, FILE*60  
 !     ..
 !     .. array arguments ..
 REAL(DP) ::  XLAMB(NB),FLU(NB)  
-INTEGER(I4B) ::  NLEVL(NB),NLEVU(NB),NSTARK(NB)  
+INTEGER(I4B) ::  NLEVL(NB),NLEVU(NB),NSTARK(NB),LL,LU  
 !     ..
 !     .. local scalars ..
-REAL(DP) ::  AA,BB,EE,FAC,OSC,PESO,REALO,TT,XL0,WAVEAIR,XKW,XN  
+REAL(DP) ::  AA,BB,EE,FAC,OSC,PESO,REALO,TT,XL0,WAVEAIR  
 INTEGER(I4B) ::  I,IJK,INTEG,ISTARK,J,JE,JT,MFULL, &
 &        NC,NDATA,NIN,NN,NN1,NN2,NNAT,NNN,NPS,NTSISO,NFSISO
 LOGICAL QLOG
-CHARACTER KEY*6,KEY2*6,RET*4
+CHARACTER KEY*6,KEY2*6,RET*4,LLCHAR*6,LUCHAR*6
 !     ..
 !     .. local arrays ..
 REAL(DP) ::  DATA(NDATAMAX),DDWS(35),SQ1(35),EEES(11), &
@@ -1347,7 +1335,7 @@ DATA TTTS,EEES/4.,4.301,4.602,4.903,5.204,5.505,10.5,11.5,12., &
 &     12.5,13.,13.5,14.,14.5,15.,16.,17./
 !     ..
 
-!IF(NSUM.NE.1.AND.NSUM.NE.2) STOP ' MORE THAN TWO STARK-COMPONENTS, CHECK!'
+IF(NSUM.NE.1.AND.NSUM.NE.2) STOP ' MORE THAN TWO STARK-COMPONENTS, CHECK!'
 
 ALLOCATE(DWS(MAXW,NB),ES(MAXNE,NB),P(MAXPS,NB),TS(MAXT,NB))
 ALLOCATE(NES(NB),NTS(NB),NWS(NB))
@@ -1449,18 +1437,11 @@ END SELECT
      IF (.NOT. Q)  GOTO 20
      CALL FFRNUM(REALO,INTEG,RET)  
      WAVEAIR=REALO
-     IF(SRANGE1) THEN
-! convert air to vacuum: ISO wavelength in air (CHECK)
-        XKW=1.D4/XLAMB(NNN)      
-        XN=1.D0+1.D-7*(643.28D0+294981.D0/(146.D0-XKW**2)+2554.D0/(41.D0-XKW**2))
-        WAVEAIR=XN*WAVEAIR ! now, waveair is in vacuum
-     ENDIF
-
      IF (ABS(WAVEAIR-XLAMB(NNN)).GT. 0.1) &
 &     PRINT*,' CHECK WAVELENGTHS (ISO)! ',WAVEAIR,' ',XLAMB(NNN) 
 !
-!    take value provided (either air or vacuum)
-!
+!    take value provided
+!     
      XLAMB(NNN)=WAVEAIR
      CALL FFRNUM(REALO,INTEG,RET)  
      OSC=REALO
@@ -1568,18 +1549,11 @@ END SELECT
      IF (.NOT. Q)  GOTO 20
      CALL FFRNUM(REALO,INTEG,RET)  
      WAVEAIR=REALO
-     IF(SRANGE1) THEN
-! convert air to vacuum: ISO1 wavelength in air (CHECK)
-        XKW=1.D4/XLAMB(NNN)      
-        XN=1.D0+1.D-7*(643.28D0+294981.D0/(146.D0-XKW**2)+2554.D0/(41.D0-XKW**2))
-        WAVEAIR=XN*WAVEAIR ! now, waveair is in vacuum
-     ENDIF
-
      IF (ABS(WAVEAIR-XLAMB(NNN)).GT. 0.1) &
 &     PRINT*,' CHECK WAVELENGTHS (ISO1)! ',WAVEAIR,' ',XLAMB(NNN) 
 !
-!    take value provided (either air or vacuum)
-!
+!    take value provided
+!     
      XLAMB(NNN)=WAVEAIR
      CALL FFRNUM(REALO,INTEG,RET)  
      OSC=REALO
@@ -1669,14 +1643,20 @@ END SELECT
 !   
 !----------------------------------------------------------------------
 !
+     LLCHAR=LABL(NLEVL(NNN))
+     LUCHAR=LABL(NLEVU(NNN))
+     IF(LLCHAR(1:2).EQ.'H1') THEN
+       READ(LLCHAR(3:4),'(I2)') LL
+       READ(LUCHAR(3:4),'(I2)') LU
+     ENDIF
 !
 !   "normal" lines
 !     
 !   in case, use Balmer-lines from Lemke
-     IF(LABL(NLEVL(NNN)).eq.'H12   '.AND. BALMER_LEMKE) THEN
+     IF(LLCHAR.eq.'H12   '.AND. BALMER_LEMKE) THEN
        QHALF(NNN) = .TRUE.
        QLOG=.FALSE.
-       CALL VCS_BALMER(XLAMB(NNN),LABL(NLEVL(NNN)),LABL(NLEVU(NNN)),NWS(NNN),DWS(:,NNN), &
+       CALL VCS_BALMER(XLAMB(NNN),LL,LU,NWS(NNN),DWS(:,NNN), &
 &         NTS(NNN),TS(:,NNN),NES(NNN),ES(:,NNN),NPS,P(:,NNN))
 
        IF(VTURB.NE.0.) THEN 
@@ -1699,6 +1679,35 @@ END SELECT
          IF(NIN.NE.NPS) STOP ' ERROR IN NPS(CONVVTURB)'
        ENDIF
 
+!   in case, use Brackett-lines from Lemke
+!   
+     ELSE IF((LLCHAR.eq.'H13   '.OR. LLCHAR.eq.'H14   ') &
+              .AND. PB_LEMKE .AND. LU.LE.10) THEN
+       QHALF(NNN) = .TRUE.
+       QLOG=.FALSE.
+       CALL VCS_PB(XLAMB(NNN),LL,LU,NWS(NNN),DWS(:,NNN), &
+&         NTS(NNN),TS(:,NNN),NES(NNN),ES(:,NNN),NPS,P(:,NNN))
+
+       IF(VTURB.NE.0.) THEN 
+         NWSN=NWS(NNN)
+         NIN=0
+         DO I = 1,NTS(NNN)*NES(NNN)
+           DO J=1,NWSN
+             NIN=NIN+1
+             PROF(J) = P(NIN,NNN)  
+           END DO
+
+           CALL CONVVTURB(PROF(1:NWSN),DWS(1:NWSN,NNN),NWSN,QLOG, &
+&            QHALF(NNN),I,VTURB,XLAMB(NNN))
+           NIN=NIN-NWSN
+           DO J=1,NWSN
+             NIN=NIN+1
+             P(NIN,NNN) = PROF(J)  
+           END DO
+         END DO
+         IF(NIN.NE.NPS) STOP ' ERROR IN NPS(CONVVTURB)'
+       ENDIF
+       
      ELSE
 
      CALL FFRKEY(KEY,NC,RET)  
@@ -1808,10 +1817,9 @@ STOP ' ERROR IN PATH'
 !
 IF (DONE(NNN)) STOP ' WRONG PATH'  
 !
-     PRINT *,'STARK PROFILES NOT PRESENT; COMPONENT:',NNN  
+     PRINT *,'STARK PROFILES NOT PRESENT; COMPONENT:',NNN,' GRIEM USED'  
      KEY = LABL(NLEVL(NNN))  
      IF (KEY(:3).EQ.'HE2' .OR. KEY(:2).EQ.'H1') THEN  
-     PRINT *,'H or HeII LINE: GRIEM USED'
           QHALF(NNN) = .TRUE.  
           NNAT = LE(NLEVL(NNN))  
           PESO = WEIGHT(NNAT)  
@@ -1840,7 +1848,7 @@ IF (DONE(NNN)) STOP ' WRONG PATH'
                     CALL GRIEM(TT,EE,SQ1,PESO,XL0,AA,BB,DDWS,VTURB)  
                     DO IJK = 1,35  
                          SQ(IJK)=SQ1(IJK)
-                         IF(SQ(IJK).LT.0.) STOP' NEG. PROFILE IN GRIEM'
+                         IF(SQ(IJK).LT.0.) STOP ' NEG. PROFILE IN GRIEM'
                          NIN = NIN + 1  
                          DWS(IJK,NNN) = DDWS(IJK)  
                          P(NIN,NNN) = LOG10(SQ(IJK))  
@@ -1850,12 +1858,7 @@ IF (DONE(NNN)) STOP ' WRONG PATH'
      ELSE  
           PRINT *,'STARK CALCULATION NOT IMPLEMENTED'  
           PRINT *,'LINE:',LABL(NLEVL(NNN)),'-',LABL(NLEVU(NNN))  
-          IF (SRANGE1) THEN
-            PRINT *,'NSTARK RESET TO 0'
-            NSTARK(NNN)=0
-          ELSE
-            STOP' CHANGE NSTARK IN FORMAL_INPUT'
-          ENDIF  
+          STOP  
      END IF  
 
 DONE(NNN) = .TRUE.  
@@ -3315,11 +3318,11 @@ REAL(DP), PARAMETER :: RYD=109677.58D0
 INTEGER(I4B) ::  NPPAL,NN1,NN2,I,LEH20  
 
 ! final consistency check
-IF (NCOMP.NE.1) STOP' NCOMP NE 1 IN TRANSIC_H_app'
-IF (LINENO(NCOMP).NE.1) STOP' LINENO NE 1 IN TRANSIC_H_app'
-IF (NSTARK(NCOMP).GT.1) STOP' NSTARK > 1 IN TRANSIC_H_app'
+IF (NCOMP.NE.1) STOP ' NCOMP NE 1 IN TRANSIC_H_app'
+IF (LINENO(NCOMP).NE.1) STOP ' LINENO NE 1 IN TRANSIC_H_app'
+IF (NSTARK(NCOMP).GT.1) STOP ' NSTARK > 1 IN TRANSIC_H_app'
 
-IF(NL.NE.ID_LLEVS) STOP' NL NE ID_LLEVS IN TRANSIC_H_AT'
+IF(NL.NE.ID_LLEVS) STOP ' NL NE ID_LLEVS IN TRANSIC_H_AT'
 
 NL=NL+2 !two more levels
 
@@ -3348,7 +3351,7 @@ FL(ID_LLEVS+2)=RYD/FLOAT(NN2**2)*CLIGHT
 DO I=1,ID_LLEVS
   IF (LABL(I).EQ.'H21') GOTO 10
 ENDDO
-STOP' H21 NOT FOUND IN LABL'
+STOP ' H21 NOT FOUND IN LABL'
 
 10 NLEVH21=I
 LEH20=LE(NLEVH21-1) !since le(k-level) =0; thus with H120
@@ -3365,7 +3368,7 @@ END
 !
 !-----------------------------------------------------------------------
 !
-subroutine vcs_balmer(xlamb,lablow,labup,nws,dws,nts,ts,nes,es,nps,p)
+subroutine vcs_balmer(xlamb,ll,lu,nws,dws,nts,ts,nes,es,nps,p)
 ! ***
 ! **********************************************************************
 ! ***
@@ -3378,6 +3381,7 @@ subroutine vcs_balmer(xlamb,lablow,labup,nws,dws,nts,ts,nes,es,nps,p)
 ! ***
 ! ***
 ! ***    adapted May 2013 by JP
+! ***    read according to original data format Nov 2022 by JP
 ! ***
 ! ***	 2-AUG-1996 18:00:10.47		ML / Bamberg.
 ! ***
@@ -3397,14 +3401,12 @@ integer(i4b), parameter :: maxw=id_maxww,maxt=id_maxtt,maxne=id_maxne,maxps=id_m
 
 real(dp) :: xlamb
 
-character*6 :: lablow, labup
-
 real(dp) :: dws(maxw), ts(maxt), es(maxne), p(maxps), ddws(0:nnws-1)
 
-integer(i4b) :: nws1, nts, nes, nps, nws
+integer(i4b) :: nws1, nts, nes, nps, nws, ll, lu
 
 
-integer(i4b), parameter :: pmne = 17, pmt = 7, pmp = 65, mline = 21  
+integer(i4b), parameter :: pmne = 17, pmt = 7, pmp = 65, mline = 20  
                                              ! max # of n_e
                                              ! max # of T
                                              ! max # of profile points
@@ -3425,16 +3427,15 @@ real(dp) :: log_alpha_inc (mline), log_t_inc (mline), log_ne_inc (mline)
                                              ! Delta log n_e
                                              ! Delta log T
 integer(i4b) :: mp (mline), mne (mline), mt (mline)
+integer(i4b), dimension(mline) :: nlow, nup
 
-integer(i4b) :: i, j, k, line, nline, iline, it, kk  
+integer(i4b) :: i, j, k, line, nline, iline, it, kk, nnl, nnu
 
 real(dp) :: ne, f0, x, q, q1, renorm
 
 character (len=1) :: null (pmt)  
 
-character*6, dimension(mline) :: nlow, nup
-
-character*6 :: nnl, nnu
+character*11 :: charline
 
 character*(*), parameter :: fpath='../inicalc/DATA/'
 
@@ -3446,16 +3447,15 @@ data ddws/0.d0,1.5849d-3,2.5119d-3,3.9811d-3,6.3096d-3,1.d-2, &
 &     2.512d2,3.981d2/
 
 
-
 !
 !       READ IN VCS ARRAYS
 !
-open(1,file=fpath//'stark_balmer_lemke.dat',status='OLD')  
+open(1,file=fpath//'balmer_lemke.dat',status='OLD')  
 
 read (1, * ) nline  
 if (nline.gt.mline) then  
 write (*,  * ) 'Table too big.  Not more than ', mline, ' lines.'  
-   stop' Table too big!' 
+   stop ' Table too big!' 
 endif  
 
 do i = 1, nline  
@@ -3467,24 +3467,27 @@ if (mp (i) .gt.pmp.or.mne (i) .gt.pmne.or.mt (i) .gt.pmt) then
    write (*, * ) 'mp:', mp (i) , ' >', pmp  
    write (*, * ) 'mne:', mne (i) , ' >', pmne  
    write (*, * ) 'mt:', mt (i) , ' >', pmt  
-   stop' Table too big in one of these!'  
+   stop ' Table too big in one of these!'  
 endif  
 enddo  
 
 do line = 1, nline  
-read (1, *) nnl, nnu  
+read (1,fmt='(A11)') charline
+read(charline(4:5),'(i2)') nnl
+read(charline(10:11),'(i2)') nnu
+
 if (nnl.ne.nlow (line) .or.nnu.ne.nup (line) ) then  
    write (*, * ) 'Inconsistency in table for', nlow (line) , ' ->', &
     nup (line)
-   stop' Inconsistency in stark_balmer_lemke!'  
+   stop ' Inconsistency in stark_balmer_lemke!'  
 endif  
 read (1, * ) ( ( (svcs (i, j, k), k = 0, mp (line) ), &
  i = 1, mt (line) ), j = 1, mne (line) )
 
-if(nnl.eq.lablow .and. nnu.eq.labup) goto 100
+if(nnl.eq.ll .and. nnu.eq.lu) goto 100
 
 enddo  
-stop' line not found stark_balmer_lemke'
+stop ' line not found stark_balmer_lemke'
 
 100 close(1)
 iline=line
@@ -3496,9 +3499,9 @@ nws=nnws
 
 nps=nts*nes*nws ! and not nws1
 
-if(nts.gt.maxt)  stop' nts > maxt'
-if(nes.gt.maxne) stop' nes > maxne'
-if(nps.gt.maxps) stop' nps > maxps'
+if(nts.gt.maxt)  stop ' nts > maxt'
+if(nes.gt.maxne) stop ' nes > maxne'
+if(nps.gt.maxps) stop ' nps > maxps'
 
 do k = 1,nws1  
   alpha(k) = log_alpha0 (iline) + log_alpha_inc (iline) * (k - 1)  
@@ -3626,7 +3629,7 @@ do j=1,nes
 enddo
 
 
-if (kk.ne.nps) stop' kk ne nps in vcs_balmer!'
+if (kk.ne.nps) stop ' kk ne nps in vcs_balmer!'
 
 ts(1:nts)=log10(ts(1:nts))
 es(1:nes)=log10(es(1:nes))
@@ -3634,6 +3637,291 @@ es(1:nes)=log10(es(1:nes))
 return
 
 END subroutine vcs_balmer
+!
+!-----------------------------------------------------------------------
+!
+subroutine vcs_pb(xlamb,ll,lu,nws,dws,nts,ts,nes,es,nps,p)
+! ***
+! **********************************************************************
+! ***
+! ***	Read VCS tables, interpolate onto common wavelength grid, &
+! ***   and transform to p(nu)d(nu) 
+! ***
+! ***	From A&AS paper `Extended VCS Stark broadening tables for hydrogen
+! ***	by Michael Lemke (michael@io.as.utexas.edu,
+! ***                     ai26@a400.sternwarte.uni-erlangen.de)
+! ***
+! ***
+! ***    adapted for Paschen & Brackett series, Nov 2022 by JP
+! ***
+! ***	 2-AUG-1996 18:00:10.47		ML / Bamberg.
+! ***
+! **********************************************************************
+! ***
+
+USE nlte_type
+USE nlte_dim
+USE fund_const, ONLY: clight
+
+implicit none  
+
+logical, parameter :: optout=.false. !if true, original values will be tabulated
+
+integer(i4b), parameter :: maxw=id_maxww,maxt=id_maxtt,maxne=id_maxne,maxps=id_maxps, &
+&                          nnws=35
+
+real(dp) :: xlamb
+
+!character*6 :: lablow, labup
+
+real(dp) :: dws(maxw), ts(maxt), es(maxne), p(maxps), ddws(0:nnws-1)
+
+integer(i4b) :: nws1, nts, nes, nps, nws, ll, lu
+
+
+integer(i4b), parameter :: pmne = 17, pmt = 7, pmp = 65, mline = 20  
+                                             ! max # of n_e
+                                             ! max # of T
+                                             ! max # of profile points
+                                             ! max # of H lines
+                                             ! VCS profiles
+
+real(dp), parameter :: f0const = 2.5985d0*4.8032d-10
+
+real(dp) :: svcs (pmt, pmne, 0:pmp), alpha(pmp), alpha_loc(pmp), svcs_loc(pmt, pmne, 0:nnws-1)
+                                             ! log Delta_alpha_min
+
+real(dp) :: log_alpha0 (mline), log_ne0 (mline), log_t0 (mline)  
+                                             ! log n_e_min
+                                             ! log T_min
+                                             ! Delta log Delta_alpha
+
+real(dp) :: log_alpha_inc (mline), log_t_inc (mline), log_ne_inc (mline)
+                                             ! Delta log n_e
+                                             ! Delta log T
+integer(i4b) :: mp (mline), mne (mline), mt (mline)
+integer(i4b), dimension(mline) :: nlow, nup
+
+integer(i4b) :: i, j, k, line, nline, iline, it, kk, nnl, nnu
+
+real(dp) :: ne, f0, x, q, q1, renorm
+
+character (len=1) :: null (pmt)  
+
+character*11 :: charline
+
+character*(*), parameter :: fpath='../inicalc/DATA/'
+
+data ddws/0.d0,1.5849d-3,2.5119d-3,3.9811d-3,6.3096d-3,1.d-2, &
+&     1.5849d-2,2.5119d-2,3.9811d-2,6.3096d-2,1.d-1,1.585d-1, &
+&     1.995d-1,2.512d-1,3.162d-1,3.981d-1,5.012d-1,6.310d-1, &
+&     7.943d-1,1.00d0,1.259d0,1.585d0,1.995d0,2.512d0,3.981d0, &
+&     6.310d0,1.0d1,1.585d1,2.512d1,3.891d1,6.310d1,1.0d2,1.585d2, &
+&     2.512d2,3.981d2/
+
+
+!
+!       READ IN VCS ARRAYS
+!
+select case(ll)
+
+case(3)  
+open(1,file=fpath//'paschen_lemke.dat',status='OLD')  
+case(4)  
+open(1,file=fpath//'brackett_lemke.dat',status='OLD')  
+case default
+  print*,ll
+  stop 'wrong lower level in vcs_pb'
+
+end select  
+
+if(lu.gt.10) stop 'upper level > 10 in vcs_pb'
+
+read (1, * ) nline  
+if (nline.gt.mline) then  
+write (*,  * ) 'Table too big.  Not more than ', mline, ' lines.'  
+   stop ' Table too big!' 
+endif  
+
+do i = 1, nline  
+read (1, * ) nlow (i), nup (i), log_alpha0 (i), log_ne0 (i), log_t0 ( &
+ i), log_alpha_inc (i), log_ne_inc (i), log_t_inc (i), mp (i), &
+ mne (i), mt (i)
+if (mp (i) .gt.pmp.or.mne (i) .gt.pmne.or.mt (i) .gt.pmt) then  
+   write (*, * ) 'Table too big in one of these:'  
+   write (*, * ) 'mp:', mp (i) , ' >', pmp  
+   write (*, * ) 'mne:', mne (i) , ' >', pmne  
+   write (*, * ) 'mt:', mt (i) , ' >', pmt  
+   stop ' Table too big in one of these!'  
+endif  
+enddo  
+
+do line = 1, nline  
+read (1,fmt='(A11)') charline
+read(charline(4:5),'(i2)') nnl
+read(charline(10:11),'(i2)') nnu
+
+if (nnl.ne.nlow (line) .or.nnu.ne.nup (line) ) then  
+   write (*, * ) 'Inconsistency in table for', nlow (line) , ' ->', &
+    nup (line)
+   stop ' Inconsistency in table (vcs_pb)!'  
+endif  
+read (1, * ) ( ( (svcs (i, j, k), k = 0, mp (line) ), &
+ i = 1, mt (line) ), j = 1, mne (line) )
+
+if(nnl.eq.ll .and. nnu.eq.lu) goto 100
+
+enddo  
+stop ' line not found lemke tables'
+
+100 close(1)
+iline=line
+
+nws1=mp(iline)
+nts=mt(iline)
+nes=mne(iline)
+nws=nnws
+
+nps=nts*nes*nws ! and not nws1
+
+if(nts.gt.maxt)  stop ' nts > maxt'
+if(nes.gt.maxne) stop ' nes > maxne'
+if(nps.gt.maxps) stop ' nps > maxps'
+
+do k = 1,nws1  
+  alpha(k) = log_alpha0 (iline) + log_alpha_inc (iline) * (k - 1)  
+enddo
+
+do i = 1, nts  
+  it = nint (10.d0**(log_t0 (iline) + log_t_inc (iline) * (i - 1) ) )
+  ts(i)=float(it)
+enddo
+
+do j = 1, nes  
+  es(j) = 10.d0**(log_ne0 (iline) + log_ne_inc (iline) * (j - 1) )  
+enddo
+
+line = iline  
+write (*,  * ) 'nl = ', nlow (line) , ';  nu = ', nup (line),' Stark broadening according to Lemke (1997)'
+
+if(optout) then
+do j = 1, nes  
+ne = 10.d0**(log_ne0 (line) + log_ne_inc (line) * (j - 1) )  
+write (*, * ) ne, ' cm^-3'  
+! svcs(i,j,0): quality flag (0 = OK)
+write (*, '(a5,1x,a8,1x,7(:'' ('',i1,'')'',i6))') 'alpha', &
+          'lambda', (abs (int (svcs (i + 1, j, 0) ) ) , &
+           nint (10.d0**(log_t0 (line) + log_t_inc (line) * i) ) , i = 0, nts  - 1)
+
+f0 = f0const * ne** (2.d0 / 3.d0)  
+
+do k = 1, nws1  
+  x = log_alpha0 (line) + log_alpha_inc (line) * (k - 1)  
+  do i = 1, nts  
+    null (i) = ' '  
+  enddo  
+write (*, '(f5.1,1x,1p,e8.3e1,1x,0p,7(f9.5,a))') x, 10.d0**x * f0, &
+& (real (svcs (i, j, k) ) , null (i) , i = 1, nts)
+enddo  
+write (*, * )  
+enddo  
+
+endif
+
+! now we interpolate the profile functions onto a common wavelength grid.
+! interpolation is linear in log profile vs. log dalpha
+
+! as a reference wavelength grid, we use the one from subr. GRIEM
+! (consistent with the one from thom_new.dat)
+
+! interpolation for all models
+
+! rember: nws1 is number of freq. points in original grid
+!       : nws is number of freq. points for output grid, with indices(0:nws-1)
+
+
+do j=1,nes
+  !recalculate alpha for given lambda 
+  f0 = f0const * es(j)** (2.d0 / 3.d0)  
+
+  do k=1,nws-1
+    alpha_loc(k)=log10(ddws(k)/f0)
+  enddo
+
+  do k=1,nws-1
+      if(alpha_loc(k).lt.alpha(1)) then
+        do i=1,nts
+          svcs_loc(i,j,k)=svcs(i,j,1) ! constant for (very) low dw
+        enddo
+      else 
+        do kk=1,nws1-1
+           if(alpha_loc(k).ge.alpha(kk) .and. alpha_loc(k).le.alpha(kk+1)) exit
+        enddo       
+!end condition
+        if(kk.eq.nws1) kk=nws1-1 
+        q=(alpha_loc(k)-alpha(kk))/(alpha(kk+1)-alpha(kk))
+        q1=1.d0-q
+        do i=1,nts
+          svcs_loc(i,j,k)=q1*svcs(i,j,kk) + q*svcs(i,j,kk+1)         
+        enddo
+      endif
+  enddo
+
+! value at dlam = 0, taken from first entry at orignal table
+  do i=1,nts
+    svcs_loc(i,j,0)=svcs(i,j,1)
+  enddo
+
+!for tests
+!  print*,j,log10(es(j))
+!  k=0
+!  print*,alpha_loc(1)-10.,svcs_loc(1,j,k),svcs_loc(7,j,k)
+!  do k=1,nws-1
+!    print*,alpha_loc(k),svcs_loc(1,j,k),svcs_loc(7,j,k)
+!  enddo
+
+enddo
+
+!finally, write dws (starting with dlam=0)
+do k=0,nws-1
+  dws(k+1)=ddws(k)
+enddo
+
+!... and profile p, including transformation
+! remember that all wavelengths (and alpha) are in Angstrom, &
+! and that the original normalization is 0.5 (and not unity) for 0<alpha<inf
+
+do j=1,nes
+  f0 = f0const * es(j)** (2.d0 / 3.d0)  
+  do k=0,nws-1
+    renorm=(xlamb+ddws(k))**2/(f0*clight*1.d8)
+    renorm=log10(renorm)
+      do i=1,nts
+        svcs_loc(i,j,k)=svcs_loc(i,j,k)+renorm
+      enddo
+  enddo  
+enddo
+
+! write transformed profile to output p (sequential order)
+kk=0
+do j=1,nes
+  do i=1,nts
+    do k=0,nws-1
+      kk=kk+1
+      p(kk)=svcs_loc(i,j,k)
+    enddo
+  enddo  
+enddo
+
+
+if (kk.ne.nps) stop ' kk ne nps in vcs_pb!'
+
+ts(1:nts)=log10(ts(1:nts))
+es(1:nes)=log10(es(1:nes))
+
+return
+
+END subroutine vcs_pb
 !
 !-----------------------------------------------------------------------
 !

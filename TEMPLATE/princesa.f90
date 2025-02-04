@@ -66,6 +66,7 @@ LOGICAL :: QCL,QDB,QRT
 REAL(DP) :: ANCDO,TL,WLC
 REAL(DP), DIMENSION(ID_NLONG) :: DL
 REAL(DP), DIMENSION(ID_RBFTR) :: FRECIN,FRECFN
+REAL(DP), DIMENSION(ID_CBSFT) :: FLCBF
 !----------------------------------------------------------------------
 !transc
 !
@@ -90,12 +91,14 @@ END MODULE princesa_var
 !                 no longer read!!! (can be present or absent in file)
 !     version 1.2 (july 2009) : new array DREXPLICIT(INDEX4): set to 1 if
 !                 explicit dr data are present (otherwise set to 0)
+!     version 1.3 (dec. 2016) : new array FLCBF(INDEX3): frequencies
+!                 for CBF transitions
 !
 SUBROUTINE PRINCE  
 !
 USE nlte_type
 USE nlte_dim
-USE princesa_var, ONLY: IOU,IU
+USE princesa_var, ONLY: IOU,IU,LABL
 USE ffr_error
 IMPLICIT NONE
 !
@@ -103,6 +106,9 @@ IMPLICIT NONE
 !       variables
 !     ..
 !     .. local scalars ..
+!   
+INTEGER(I4B) :: I,J
+
 CHARACTER DC*6,FICHERO*32,RET*4
 !     ..
 !     .. external subroutines ..
@@ -169,6 +175,16 @@ CLOSE (IU)
 
 CLOSE (IOU)  
 10000 CONTINUE  
+
+! JO FEB 2023: CHECK THAT ALL LEVELS ARE DIFFERENT
+DO I=1,ID_LLEVS-1
+  DO J=I+1,ID_LLEVS
+    IF(LABL(I).EQ.LABL(J)) THEN
+      PRINT*,I,J,LABL(I),LABL(J) 
+      STOP ' DIFFERENT LEVELS HAVE IDENTICAL LABELS'
+    ENDIF 
+  ENDDO                      
+ENDDO
 
 RETURN  
 
@@ -497,7 +513,7 @@ USE princesa_var, ONLY: NL,NLX,NS,NAT,ION,IONG,LA0,LA1,IXA0,IXA1, &
 &       LABL4,LABL1,LABU1,LABL3,IPARE5, &
 & QDB,QCL,QRT, &
 & TL,ANCDO,WLC,DL,FRECIN,FRECFN, &
-& LABL2,PAREN2,PAREN3,PAREN4,LABU2,DREXPLICIT
+& LABL2,PAREN2,PAREN3,PAREN4,LABU2,DREXPLICIT,FLCBF
 USE ffr_error
 
 IMPLICIT NONE
@@ -535,9 +551,11 @@ IMPLICIT NONE
 !                the numbers 2, 3, 4 and 5 instead of 1. there are
 !                only one different:
 !                paren_( ): parent level label
-!                frecin( ): actual edge frequency  (rbf)
-!                frecfn( ): edge frequency with respect to next ground
-!                           state
+!                frecin( ): actual edge energy  (rbf) [in Kayser]
+!                frecfn( ): edge energy with respect to next ground
+!                           state [in Kayser]
+!                flcbf( ): edge frequency with respect to next ground
+!                           state for cbf ionization
 !
 !     ..
 !     .. local scalars ..
@@ -823,6 +841,32 @@ STOP 'ERROR IN TRANSIC - LABEL L OR S NOT FOUND -CBF-CBS'
   310 CONTINUE  
 
 LABL3(INDEX3) = NN  
+FLCBF(INDEX3) = FL(NN)  
+
+!       calculation of actual edge frequency (if not ground state
+!       ionization)
+!
+DO ISI = 1,NL  
+     IF (LABL(ISI).EQ.PARE) THEN  
+          NN = ISI  
+          GO TO 311  
+     END IF  
+END DO  
+
+STOP 'ERROR IN TRANSIC - LABEL PARE (CBF) NOT FOUND'  
+
+  311 CONTINUE  
+IJ = IGENIO(LE(NN),LI(NN))  
+L0 = IFIRSL(IJ)  
+IF (L0.EQ.NN) THEN  
+!       groundstate ionization
+     DELTAE = 0.D0  
+ELSE  
+!       excited state ionization
+     DELTAE = FL(L0) - FL(NN)  
+END IF  
+
+FLCBF(INDEX3) = FLCBF(INDEX3) + DELTAE  
 
 !       read data
 DO I = 1,NDATOS  

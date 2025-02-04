@@ -128,7 +128,7 @@ PRINT *
 PRINT *,' MODEL-PARAMETERS'  
 PRINT *  
 
-PRINT *,'TEFF = ',TEFF,' LOG G =',LOG10(GGRAV),' RSTAR = ',SR/6.96D10
+PRINT *,'TEFF = ',TEFF,' LOG G =',LOG10(GGRAV),' INNERMOST RADIUS POINT = ',SR/6.96D10
 PRINT *,' YHE = ',YHE  
 PRINT *,' MDOT = ',XMLOSS*3.1557D7/1.989D33,' VINF = ',VMAX*1.D-5, &
 &  ' BETA = ',BETA
@@ -203,8 +203,6 @@ DO I = 1,ND
          DEP(J)=B(J)/A(J)*A(NU)/B(NU)*XNELTE(I)
 ! for comparison with Adi
 !          DEP(J)=B(J)/A(J)*XNELTE(I)
-!note for jon: with the next statement, we have actual occupation numbers
-         dep(j)=b(j)
        ELSE
          DEP(J)=0.D0
        ENDIF  

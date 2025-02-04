@@ -1,0 +1,26 @@
+echo
+echo ---- SE ELIMINAN FICHEROS:
+echo 
+echo ----   .eo, .mod, .o, control... ----
+echo ----   ATOM_FILE ----
+echo ----   FORMAL_INPUT, FORMALDATA  ----
+echo
+
+rm -f *.eo
+rm -f *.mod
+rm -f *.o
+rm -f control*
+rm -f *~
+rm -f ATOM_FILE
+rm -f FORMAL_INPUT
+rm -f FORMALDATA
+rm -f IX.DAT
+rm -f OX
+rm -f OUT_LASTMODEL
+rm -f SUBDIR.LIS
+rm -f INDAT.DAT
+rm -f test*.test
+rm -f fort*
+rm -f CHAINFIL
+rm -f STARK.BIN
+rm -f A10HHe*.dat

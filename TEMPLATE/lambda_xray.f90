@@ -1,9 +1,17 @@
 ! routines for x-ray treatment
-! version 1.0 (October 2014, programmed by Luiz Carneiro and Jo
+! version 1.0   October 2014, programmed by Luiz Carneiro and Jo
+! version 1.1   July 2016, programmed by Jo and Koushik Sen, to
+!               allow for a better description of radiative shocks
+!               (see version control in nlte.f90)
+! version 1.1.1 Sept 2020: one bug found by Sarah Brands removed  
+! version 1.1.2 Oct  2020: compatible with gfortran  
+! version 1.3   Sept 2023  few changes (mostly, regarding comments and output),
+!               consistent with v11; needs to be tested
+!               (in case, use previous version) 
 !
 !-----------------------------------------------------------------------
 !
-SUBROUTINE TSHOCK(TS,V,R,XMU,ND)
+SUBROUTINE TSHOCK(TS,V,R,RTAU23,XMU,ND)
 ! calculates stratification of X-ray shock-temperatures, basically following
 ! Pauldrach et al. 1994.
 ! Change this routine if you want to test other stratificationsq 
@@ -15,7 +23,7 @@ USE nlte_type
 USE nlte_dim, ONLY: ID_NDEPT
 USE fund_const, ONLY: AMH, AKB
 USE nlte_var, ONLY: MODNAM, DELMU, VMAX, VSOUND
-USE nlte_xrays, ONLY: FX, LXMIN
+USE nlte_xrays, ONLY: FX, PX, LXMIN, RMINX_EFF
 
 IMPLICIT NONE
 
@@ -25,8 +33,8 @@ REAL(DP), DIMENSION(ND), INTENT(OUT) :: TS
 
 REAL(DP), DIMENSION(ID_NDEPT) :: UJUMP
 
-REAL(DP) :: XMU
-REAL(DP) :: GAMX,MX,RMINX,UINFX,TS_CONST,VMIN
+REAL(DP) :: RTAU23,XMU
+REAL(DP) :: GAMX,MX,UINFX,TS_CONST,VMIN,RMINX
 
 INTEGER(I4B) :: L,L1,L2
 
@@ -35,16 +43,18 @@ LOGICAL :: OPTXRAY
 OPEN (1,FILE=TRIM(MODNAM)//'/INXRAY.DAT',STATUS='OLD')  
 REWIND 1
 READ (1,FMT=*) OPTXRAY,FX
-IF(.NOT.OPTXRAY) STOP' OPTXRAY = FALSE IN CATALOGUE/INXRAY.DAT'
-READ (1,FMT=*) GAMX,MX,RMINX,UINFX 
+IF(.NOT.OPTXRAY) STOP ' OPTXRAY = FALSE IN CATALOGUE/INXRAY.DAT'
+READ (1,FMT=*) GAMX,MX,RMINX,UINFX,PX 
 CLOSE(1)
 
 ! for simplicity, we calculate the shock temperature from the approximate
 ! expression, neglecting terms with O(vsound), i.e., assuming strong shocks
-! (also w.r.t. consistency with Feldmeier et al., Eq. 19)
+! (also w.r.t. consistency with Feldmeier et al., Eq. 19), and approximate
+! v_0=v_pre-v_shock by v_0 approx v_jump=u (assuming an isothermal shock
+! w.r.t. v_1=v_post_v_shock << v_0, see Pauldrach et al. 1994)
 ! Note: the exact expression would be
 ! Tshock = 3/16 mu mh/k * (u^2 + (14/5 a^2 * (1 - 3/14 a^2/u^2)))
-
+! again using u instead of v_0
 
 TS_CONST=3.D0/16.D0*XMU*AMH/AKB
 
@@ -55,6 +65,15 @@ TS=TS_CONST*UJUMP**2
 !TS=TS_CONST/DELMU*UJUMP**2
 ! corrected for variable xmu; xmu_actual=xmu/delmu
 
+!print*, 'XMU=',XMU
+!print*, 'AMH=',AMH
+!print*, 'AKB=',AKB
+!print*, 'V= ',V
+!print*, 'GAMX =',GAMX
+!print*, 'UJUMP=',UJUMP
+!print*, 'TS=',TS
+
+
 VMIN=MX*VSOUND
 
 DO L=1,ND
@@ -62,12 +81,15 @@ DO L=1,ND
 ENDDO
 L1=L
 
+!JO changed July 2016
+!RMINX in units of RSTAR (not SR)
 DO L=1,ND
-  IF(R(L).LT.RMINX) EXIT
+  IF(R(L)/RTAU23.LT.RMINX) EXIT
 ENDDO
 L2=L
 
 LXMIN=MAX(L1,L2)-1
+RMINX_EFF=R(LXMIN)
 
 DO L=LXMIN+1,ND
   TS(L)=0.D0
@@ -75,7 +97,8 @@ ENDDO
 
 PRINT*
 PRINT*,'SHOCK TEMPERATURES CALCULATED, FROM L=1 TO L=',LXMIN
-PRINT*,'MINIMUM EMISSION RADIUS = ',R(LXMIN)
+PRINT*,'MINIMUM EMISSION RADIUS (in units of RSTAR) = ',RMINX_EFF/RTAU23
+PRINT*,'MINIMUM EMISSION RADIUS (in units of SR) = ',RMINX_EFF
 PRINT*
 PRINT*,'SHOCK TEMPERATURE AT RMAX = ',TS(1)/1.D6,' MK'
 PRINT*,'MINIMUM SHOCK TEMPERATURE = ',TS(LXMIN)/1.D6,' MK'
@@ -91,14 +114,20 @@ subroutine lambda_xray(xmu,ts,r,v,rho,xne,xnh,fcl,nd)
 ! radiative and adiabatic shocks, following Feldmeier et al. 1997
 ! The basic cooling functions are calculated via Raymond & Smith 1989
 
-! Note: you might play with Theta and xne
+! Note: you might play with Theta and xne;
+! so far, xne = 1.d10 fixed in cooling function
+!JO July 2016
+! for the electron density used to calculate the cooling time/length, we
+! now use the hot-plasma conditions (IHe=2), but check for exceptions  
   
 !version 0.1, programmed by Luiz Carneiro (2014)
+!version 0.2, modified by Jo (using input from Koushik Sen) (July 2016)
   
 USE nlte_type
 USE fund_const, only: hh,clight,ev
-USE nlte_var, only: delmu
-USE nlte_xrays, only: enerx, spec=>lambdax, lxmin
+USE nlte_var, only: delmu, yhe=>yhein, modnam
+USE nlte_xrays, only: enerx, spec=>lambdax, lxmin, fxl, &
+  fx, px, rminx_eff
 
 IMPLICIT NONE
 
@@ -165,6 +194,14 @@ logical :: isothermal = .false.
 ! structure in the latter is independent of theta, whilst the density of
 ! the reverse shock changes significantly. Thus, normalizing to the
 ! forward shock retains a somewhat stable solution if theta is changed
+
+! Note also the inconsistency that we have calculated Tshock from u_jump
+! (assuming v_0 approx u_jump), but in the following will use
+! v_1 = v_0/4 (adiabatic shock). Nevertheless, this inconsistency is weak,
+! since globally most shocks are (quasi-) isothermal with rho_1/rho_0 >> 1
+! which controls the shock temperature, whereas locally (close to the jump
+! itself), the jump is only a factor of four. Anyway, since the difference is
+! only a factor (4/3)^2, there should be no problem here.
 !
 !***************************************************************************
 
@@ -176,7 +213,7 @@ integer(i4b) :: i, j, k, nt, n, l
 real(sp), dimension(nf) :: energy, lambdanu
 
 real(dp) :: tmin, tmax, dt, w1, w2, t1, t2, tt
-real(dp) :: Fract_tc_tf, Fract_Lc_rs, xne_av, xnh_av, kappa_f, dxi
+real(dp) :: Fract_tc_tf, Fract_Lc_rs, xne_av, xnh_av, kappa_f, dxi, xne_app_last
 
 real(dp), allocatable, dimension(:) :: tgrid,lambdainter
 real(dp), allocatable, dimension(:,:) :: lambda
@@ -191,10 +228,24 @@ real(dp), dimension (NFELD) :: f_eta_rev, g_eta_rev,   &
 real(dp), dimension(NFELD) :: f_rev, g_rev
 
 
+!JO July 2016
+!check consistency of provided ('cool') electron density at lowermost point
+!with approximate hot plasma xne-value. If differences, then most likely
+!other elements than H/He are dominating, and another approach must be provided.
+xne_app_last=xnh(nd)*(1.+2.*YHe)
+if(abs(1.-xne_app_last/xne(nd)).gt.0.05) then
+  print*,' approximate electron-density used for X-ray emission erroneous!'
+  print*,' most likely, H/He not dominating in this model!'
+  print*,' change approach!'
+  print*,xne(nd),xne_app_last
+  stop ' approximate electron-density used for X-ray emission erroneous!'
+endif
+
+
 !create grid of models
 !
 tmin=4.d0
-if(tmin.gt.ts(lxmin)) stop'tmin > ts(lxmin). Modify minimum emission radius!' 
+if(tmin.gt.ts(lxmin)) stop 'tmin > ts(lxmin). Modify minimum emission radius!' 
 tmax=max(ts(1),ts(1)*theta) ! to account for the double shock structure
 tmax=int(log10(tmax))+1.
 print*
@@ -213,7 +264,7 @@ do i=1,nt
 !  print*,i,tgrid(i)
 enddo
 
-if(tgrid(nt).le.tmax) stop' tgrid(nt) < tmax'
+if(tgrid(nt).le.tmax) stop ' tgrid(nt) < tmax'
 
 !actually i_nbin can be also smaller than nf, if other freq. grid required, e.g.
 !i_nbin = int(1000/x_binsyz),
@@ -255,13 +306,41 @@ allocate(spec(nf,lxmin))
 spec=0.d0
 
 print*
+
+if(.not.allocated(fxl)) allocate(fxl(nd))
+fxl=0.d0
+
+open (1,file=trim(modnam)//'/OUT_XRAY',status='unknown')  
+rewind 1
+
+print* 
+if(px.lt.-999.99) then
+  print*,' Old approach with constant filling factor,'
+  print*,' giving rise to rho^2-dependent emission'
+  print*,' for radiative and adiabatic shocks!'
+  write(1,*) ' Feldmeier approach with constant filling factor'
+  write(1,*) ' fx = ',fx
+  write(1,*) ' Rmin (in SR) = ',rminx_eff
+else
+  print*,' New approach with radius-dependent filling factor,'
+  print*,' giving rise to rho-dependent emission for radiative shocks,'
+  print*,'          and rho^2-dependent emission for adiabatic ones!'
+  write(1,*) ' New approach with radius dependent filling factor'
+  write(1,*) ' no = dN/dln r = ',fx,' p = ',px
+  write(1,*) ' Rmin (in SR) = ',rminx_eff
+endif
+print*
+
 do l=1,lxmin
 
 logt=log10(ts(l))
 
 tinput=logt
-xne_av=xne(l)/fcl(l)
+
+!xne_av=xne(l)/fcl(l)
 xnh_av=xnh(l)/fcl(l)
+!modified
+xne_av=xnh_av*(1.+2.*YHe)
 
 call cooling_flowing_time &
 !& (Fract_tc_tf,Fract_Lc_rs,ts(l),r(l),v(l),rho(l),xne_av,xnh_av,xmu/delmu(l), &
@@ -270,22 +349,22 @@ call cooling_flowing_time &
 &  theta,kappa_f,l)
 
 if (Fract_tc_tf .lt. 1.d0) then
-      if(kappa_f.ne.0.d0) stop' radiative and kappa_f ne 0!'
+      if(kappa_f.ne.0.d0) stop ' radiative and kappa_f ne 0!'
       g_rev = g_ksi
       f_rev = f_ksi
  
 else
       call adiabatic_part(theta,kappa_f,f_eta_rev,g_eta_rev,f_eta_for,g_eta_for,NFELD)
 
-if(isothermal) then
-f_eta_rev=1.d0
-g_eta_rev=1.d0
-f_eta_for=1.d0
-g_eta_for=1.d0
-endif
+      if(isothermal) then
+        f_eta_rev=1.d0
+        g_eta_rev=1.d0
+        f_eta_for=1.d0
+        g_eta_for=1.d0
+      endif
 
 ! g normalized to forward shock, g(eta_f=1)=1
-! rev. shock temperature = : T_for* g_rev =: T_jump * g_rev with T_jump = ts
+! rev. shock temperature = : T_for * g_rev =: T_jump * g_rev with T_jump = ts
       g_rev = g_eta_rev
       f_rev = f_eta_rev
 
@@ -352,7 +431,7 @@ do k=1,NFELD            ! radiative cooling
       logt = tinput
 
 ! g normalized to forward shock, g(eta_f=1)=1
-! forw. shock temperature = : T_for* g_eta_for =: T_jump * g_eta_for with T_jump = ts
+! forw. shock temperature = : T_for * g_eta_for =: T_jump * g_eta_for with T_jump = ts
       logt = logt + log10(g_eta_for(k))
 
       if (logt .lt. 4.0d0) then
@@ -399,6 +478,8 @@ endif
 end do ! cooling zones
 
 enddo ! depth loop
+
+close(1)
 
 dxi=1./float(nfeld)
 
@@ -3816,9 +3897,20 @@ eta_c = 1.d0-0.1314d0*kappa_f-0.02857d0*kappa_f**2
 
 eta_f = 1.d0  !position of forward shock
 
+!JO Sept. 2018: this is (according to Feldmeier) only valued for kappa_f <0.3
+if(kappa_f .ge. 0.4) then
+  print*,' kappa_f = ',kappa_f
+  stop ' kappa_f > 0.4; either T_shock too large or v(l) to low'
+endif
 eta_r = eta_c - (1.d0-eta_c)*(1.d0-kappa_f+kappa_f**2)*theta**  &
 &            (0.5d0-0.31d0*kappa_f+0.55d0*kappa_f**2)
 !   print*, eta_c, eta_f, eta_r
+
+!JO Sept. 2018
+if(eta_r.lt.0. .or. eta_r.gt.eta_c) then
+  print*,eta_c,eta_r
+  stop ' problems in double-shock structure: eta_r'
+endif  
 
 !**************
 !REVERSE SHOCKS
@@ -3868,6 +3960,8 @@ Subroutine cooling_flowing_time(Fract_tc_tf,Fract_Lc_rs,tsl,rl,vl,rhol,xnel,xnhl
 USE nlte_type
 USE nlte_var, only: vmax, sr
 USE fund_const, only: akb, amh, pi
+USE nlte_xrays, only: fx,px,fxl,rminx_eff
+
 
 IMPLICIT NONE
 
@@ -3891,18 +3985,37 @@ Fract_tc_tf=Fract_tc_tf*(vl*vmax)/(rl*sr)*rhol/(xnel*xnhl)*tsl**1.5
 Fract_Lc_rs=fac/ar*(16./3.)**2/4.**5*(akb/(xmu*amh))**1.5
 Fract_Lc_rs=Fract_Lc_rs/(rl*sr)*rhol/(xnel*xnhl)*tsl**2
 
+
+
+!either use old approach with constant filling factor
+!(giving rise to rho^2 dependent emissivities in all cases)
+if (px.lt.-999.99) then
+  fxl(l)=fx
+!or calculate new X-ray filling-factor according to work by Koushik Sen + JP,
+!unifying the Feldmeier+ and Owocki+ (2013) work 
+else
+  fxl(l)=fx*(rminx_eff/rl)**px*amin1(Fract_Lc_rs,1.)
+
+!JO if thin-shell mixing shall be considered, replace amin1() by
+! 1.d0/(1.d0+1./Fract_Lc_rs)^m  with mixing exponent m  
+endif
+!NOTE: this routine is only called for l=1,lxmin,
+!and all fxl(l) for l>lxmin are set to zero
+
 if(Fract_tc_tf.lt.1.d0) then
   kappa_f= 0.d0
-  write(*,10) l,rl,tsl,fract_tc_tf,fract_Lc_rs
+  write(1,10) l,rl,tsl,fract_tc_tf,fract_Lc_rs,fxl(l)
+  write(*,10) l,rl,tsl,fract_tc_tf,fract_Lc_rs,fxl(l)
 else
   tfpo=tsl  !see comment above
   kappa_f=1.d0+sqrt(3.d0*xmu*amh/(16.*akb*tfpo))*vl*vmax
   kappa_f=1.d0/kappa_f
-  write(*,20) l,rl,tsl,fract_tc_tf,fract_Lc_rs,kappa_f
+  write(1,20) l,rl,tsl,fract_tc_tf,fract_Lc_rs,fxl(l),kappa_f
+  write(*,20) l,rl,tsl,fract_tc_tf,fract_Lc_rs,fxl(l),kappa_f
 endif
-
- 10 format('L =',I3,' R = ',f9.3,' Tshock = ',e9.3,' tcool/tflow = ',e9.3,' Lcool/rsh = ',e9.3,' RADIATIVE!')
- 20 format('L =',I3,' R = ',f9.3,' Tshock = ',e9.3,' tcool/tflow = ',e9.3,' Lcool/rsh = ',e9.3, &
+  
+ 10 format('L =',I3,' R = ',f9.3,' Tshock = ',e9.3,' tcool/tflow = ',e9.3,' Lcool/rsh = ',e9.3,' fvol(l) = ',e9.3,' RADIATIVE!')
+ 20 format('L =',I3,' R = ',f9.3,' Tshock = ',e9.3,' tcool/tflow = ',e9.3,' Lcool/rsh = ',e9.3,' fvol(l) = ',e9.3,&
 &           ' ADIABATIC! kappa = ',f9.3)  
 
 end Subroutine cooling_flowing_time
@@ -3938,16 +4051,16 @@ real(dp) :: dx, ered, x1, q, q1, dx1, dxhalf, h, eb, er, error
 integer(i4b) :: nf, k, i, ired, kp, inext, l, kred, kblue
 
 
-if(lbound(enerx,1).ne.0) stop' lower bound of enerx ne 0'
+if(lbound(enerx,1).ne.0) stop ' lower bound of enerx ne 0'
 nf=ubound(enerx,1)
 
-if(1.d8/lamred .lt. enerx(1)) stop' interpol_xray: lamred outside xray grid'
-if(fre(ifre) .gt. enerx(nf)) stop' interpol_xray: fre(ifre) outside xray grid'
+if(1.d8/lamred .lt. enerx(1)) stop ' interpol_xray: lamred outside xray grid'
+if(fre(ifre) .gt. enerx(nf)) stop ' interpol_xray: fre(ifre) outside xray grid'
 
 !test whether equidistant grid
 dx=enerx(1)-enerx(0)
 
-if(abs(1.-dx/(enerx(nf)-enerx(nf-1))).gt.1.d-12) stop' enerx not equidistant'
+if(abs(1.-dx/(enerx(nf)-enerx(nf-1))).gt.1.d-12) stop ' enerx not equidistant'
 
 allocate(lamint(0:nf,lxmin))
 allocate(dum(ifre,lxmin))
@@ -3982,7 +4095,7 @@ do l=1,lxmin
     if(lamint(i,l).le.lamint(i+1,l)) then
       if(lambdax(i+1,l).ne.0.d0) then
         print*,i,l,lamint(i,l),lamint(i+1,l),lambdax(i+1,l)
-        stop' interpol_xray: problems with precision'
+        stop ' interpol_xray: problems with precision'
       endif
     endif
   enddo
@@ -3993,7 +4106,7 @@ ered=1.d8/lamred
 do i=1,nf
   if(ered.ge.enerx(i-1) .and. ered .lt. enerx(i)) goto 5
 enddo     
-stop' 1 in interpol_xray'
+stop ' 1 in interpol_xray'
 
 5 continue
 
@@ -4012,7 +4125,7 @@ intlow(1:lxmin)=q*lamint(ired-1,:)+q1*lamint(ired,:)
 do k=1,nf
   if(fre(k).gt.ered) goto 10
 enddo
-stop' 2 in interpol_xray'
+stop ' 2 in interpol_xray'
 
 10 continue
 
@@ -4025,7 +4138,7 @@ x1=fre(k)
 do i=inext,nf
   if(x1 .ge. enerx(i-1) .and. x1 .lt. enerx(i)) goto 15
 enddo     
-stop' 3 in interpol_xray'
+stop ' 3 in interpol_xray'
 
 15 continue
 !interpolate energy-integrals at fre(k)
@@ -4042,8 +4155,10 @@ intup(1:lxmin)=q*lamint(inext-1,:)+q1*lamint(inext,:)
 !enddo
 
 !reverse order, since integration from high to low frequencies
-integrals(k,:)=intlow-intup
-if (minval(integrals(k,:)).lt.0.d0) stop' interpol_xrays: integrals negative'
+!JO Sept 2020: bug found by Sarah Brands removed 
+!integrals(k,:)=intlow-intup
+integrals(k,:)=intlow(1:lxmin)-intup(1:lxmin)
+if (minval(integrals(k,:)).lt.0.d0) stop ' interpol_xrays: integrals negative'
 
 intlow=intup
 
@@ -4052,7 +4167,7 @@ enddo ! all frequencies
 !total energy
 do l=1,lxmin
   h=sum(integrals(kp:ifre,l))
-  if (h.gt.lamint(1,l)) stop' interpol_xrays: summ(energies) > lamint!'
+  if (h.gt.lamint(1,l)) stop ' interpol_xrays: summ(energies) > lamint!'
   eps0(l)=h !slightly different from lamint, due to edge effects
 enddo
 
@@ -4140,7 +4255,7 @@ enddo
 print*
 print*,'test for interval = ',1.d8/er,'to',1.d8/eb,' A'
 print*,'energy not conserved by ',error
-if(error.gt.0.05) stop' interpol_xrays: energy of interpolated values not conserved(1)!'
+if(error.gt.0.05) stop ' interpol_xrays: energy of interpolated values not conserved(1)!'
 
 !--------------------------------------------------------------------------
 !energy conservation in total freq. range, and
@@ -4163,7 +4278,7 @@ enddo
 print*
 print*,'test for total range = ',1.d8/ered,'to',1.d8/fre(ifre),' A'
 print*,'energy not conserved by ',error
-if(error.gt.0.05) stop' interpol_xrays: energy of interpolated values not conserved(2)!'
+if(error.gt.0.05) stop ' interpol_xrays: energy of interpolated values not conserved(2)!'
 
 print*
 print*,'interpolation of x-ray emission to coarse grid done'
@@ -4171,7 +4286,7 @@ print*,'interpolation of x-ray emission to coarse grid done'
 !can be deleted when everything is running
 do k=1,kp-1
   do l=1,lxmin
-    if(integrals(k,l).ne.0d0) stop' problem in integrals'
+    if(integrals(k,l).ne.0d0) stop ' problem in integrals'
   enddo
 enddo  
 
@@ -4223,13 +4338,13 @@ do i=1,n_kedges
 read(2,*) z(i),n(i),eth(i),eth_kaastra,sigma(i),s(i),zeff(i), &
 &        aug_1_6(i,1),aug_1_6(i,2),aug_1_6(i,3), &
 &        aug_1_6(i,4),aug_1_6(i,5),aug_1_6(i,6)
-
+!sigma(i)=0.0
 err=max(abs(1.-eth(i)/eth_kaastra),err)
 summ=sum(aug_1_6(i,:))
-if(summ.ne.10000.) stop' error in Auger probabilities!'
+if(summ.ne.10000.) stop ' error in Auger probabilities!'
 
 !**************************************************
-! Remeber to multiply sigma(i) by 1.E-18
+! Remember to multiply sigma(i) by 1.E-18
 !**************************************************
 !print*, z(i),n(i),eth(i),sigma(i),s(i),zeff(i) 
 end do
@@ -4261,7 +4376,7 @@ eth=eth*const
 print*
 print*,'K-shell data read'
 print*,'max deviation Daltabuit & Cox vs. Kaastra & Mewe (thresholds) = ',err
-if(err.gt.5.d-2) stop' deviation too large!'
+if(err.gt.5.d-2) stop ' deviation too large!'
 print*
 
 aug_1_6=aug_1_6/10000.
@@ -4342,7 +4457,7 @@ enddo
 do kk=1,ifre
     if(eth_min.eq.fre(kk)) goto 5
 enddo
-stop' min edge not found in opacit_kshell'
+stop ' min edge not found in opacit_kshell'
 
 
 5 kmin=kk
@@ -4369,8 +4484,8 @@ do k=1,n_kedges
 !bg element
   if(indexel(zold).eq.-1) then
 
-     if(jatom_full(zold).ne.1) stop' K-shell absortion from not selected bg-element!'
-     if(name(zold).ne.names1(zold)) stop' opacit_kshell: names not consistent (1)!'
+     if(jatom_full(zold).ne.1) stop ' K-shell absorption from not selected bg-element!'
+     if(name(zold).ne.names1(zold)) stop ' opacit_kshell: names not consistent (1)!'
 !     print*,k,z(k),nionk(k),iminbg(zold),imaxbg(zold)
      if(nionk(k).lt.iminbg(zold) .or. nionk(k).gt.imaxbg(zold)) cycle     
      print*,' k-shell opacity from bg element', zold, name(zold), nionk(k)
@@ -4386,10 +4501,10 @@ do k=1,n_kedges
      !explicit element
   else
      kex=indexel(zold)
-     if(name(zold).ne.labat(kex)) stop' opacit_kshell: names not consistent (2)!'
+     if(name(zold).ne.labat(kex)) stop ' opacit_kshell: names not consistent (2)!'
 ! account for zeff
      iz=int(zeff(kex))
-     if(float(iz)-zeff(kex).gt.1.d-12) stop' opacit_kshell: something wrong with int(zeff)!'
+     if(float(iz)-zeff(kex).gt.1.d-12) stop ' opacit_kshell: something wrong with int(zeff)!'
      iex=nionk(k)-iz ! this is the index w.r.t. ionization state of expl. elements
      if(iex.lt.iminex(kex) .or. iex.gt.imaxex(kex)) cycle     
      print*,' k-shell opacity from exp. elem.', kex, labat(kex), nionk(k),'(',iex,')'
@@ -4403,7 +4518,7 @@ do k=1,n_kedges
   do kk=1,ifre
     if(eth(k).eq.fre(kk)) goto 10
   enddo
-  stop' edge not found in opacit_kshell'
+  stop ' edge not found in opacit_kshell'
 
 10 continue
   
@@ -4442,12 +4557,12 @@ integer(i4b) :: k,kk
 
 real(dp) :: wf, quant, xint, const
 
-if(itrans.le.0 .or. itrans.gt.n_kedges) stop' intermepho_auger: error in itrans'
+if(itrans.le.0 .or. itrans.gt.n_kedges) stop ' intermepho_auger: error in itrans'
 
 do kk=1,ifre
    if(eth(itrans).eq.fre(kk)) goto 10
 enddo
-stop' intermepho_auger: edge not found'
+stop ' intermepho_auger: edge not found'
 
 10 continue
   
@@ -4470,7 +4585,7 @@ enddo
 const = 4.d0*pi/(clight*hh)  
 x1 = const*xint  
 
-if(x1.le.0.) stop' INTERMEPHO_AUGER!'
+if(x1.le.0.) stop ' INTERMEPHO_AUGER!'
 
 return  
 end

@@ -9,8 +9,7 @@ INTEGER(I4B), ALLOCATABLE, DIMENSION(:,:) :: INVERTED
 !----------------------------------------------------------------------
 !cprepr
 !
-REAL(DP), DIMENSION(ID_DEPFI) :: VZRP  ! changed Sept 2015 (previous dim too large)
-REAL(DP), DIMENSION(2*ID_DEPFI) :: XCMFP
+REAL(DP), DIMENSION(2*ID_DEPFI) :: VZRP,XCMFP
 REAL(DP), DIMENSION(ID_CORES+2+4*ID_NOCOR) :: WP,WP1
 !----------------------------------------------------------------------
 !cvoigt etc
@@ -61,6 +60,13 @@ REAL(DP), DIMENSION(ID_NDEPT) ::  FIC,TCL_FAC_LINE,TCL_FAC_CONT
 
 LOGICAL OPTTHICK
 
+!
+!indices, continuum fluxes from FLUXCONT
+!
+INTEGER(I4B) :: KLOW, KUP
+REAL(DP) :: LAMTRANS, FCONTLOW, FCONTUP
+REAL(DP), PARAMETER :: UVLIMIT = 3000.
+
 END MODULE formalsol_var
 !
 !***********************************************************************
@@ -75,7 +81,7 @@ USE nlte_dim
 USE fund_const, ONLY: CLIGHT
 USE ffr_error
 USE formalsol_var, ONLY: NSTARK,GAMMAL,GAMMAC,WEIG,XNUE,VMAX,VTURB,FILE,LINE, &
-& XNEMIN,VTURBMIN,VTURBMAX,VTURBV
+& XNEMIN,VTURBMIN,VTURBMAX,VTURBV,KLOW,KUP,UVLIMIT
 USE formalsol_var, ONLY: INVERTED, NLEVL, NLEVU, QHALF, NWS, NTS, NES, &
 & DWS, TS, ES, PS, OPTTHICK, FIC, TCL_FAC_LINE, TCL_FAC_CONT
 USE preformal_var, ONLY: AT
@@ -190,7 +196,7 @@ IMPLICIT NONE
 !                   in main program, and provide corresponding INPUT keyword
 !                   Files IX.DAT and STARK.BIN are now saved in model-directory,
 !                   to allow for simultaneous jobs
-!
+!                   Use consistent preformal.f90 (v6.2 or newer)!
 !
 !     version 7.1.0 november 2014: inclusion of optically thick clumping
 !                   (programmed by Jon Sundqvist), i.e. porosity and vorosity
@@ -199,37 +205,59 @@ IMPLICIT NONE
 !                   additional file OUT_CLUMPING required).
 !                   incoherent e-scattering adapted for optically thick clumping
 !
+!     version 7.1.1 july 2016: function PERFIL renamed to PERFIL1, because of
+!                   overlap with PRINCESA
 !
-!     version 8.0 july 2015: emergent spectrum in specific range, from
-!                   occupation numbers resulting from cmf-calculations
-!                   line-name = 'UV'
-!                   function perfil renamed to perfil1 (same name as in princesa)
-!                   missing: vturb(r)
-!                            correct treatment of inversion
-!                            voigt broadening
-!                            unpack packed lines in expl. elements
-!                            e-scat???
-!     NOTE: so far, we calculate individual lines using CONT_FORMAL,
-!           whilst for the 'complete' spectra we use CONT_FORMAL_CMF.
-!           The difference is that CONT_FORMAL uses pseudo-continua
-!           for OPAC and SCONT (somewhat inconsistently calculated with J(cmf)),
-!           whilst CONT_FORMAL_CMF uses pure continuum values. This gives,
-!           for unbroadened spectra, slight differences due to a different
-!           normalization and background, but incorporates the effects from the 
-!           additional lines present in the complete treatment. We checked that
-!           using CONT_FORMAL_CMF for individual lines gives profiles that are
-!           identical with those from the complete approach.
-!
-!     version 8.1 july 2016: inclusion of depth-dependent micro-turbulence
-!                   for standard path (from v7.1 in path standard_xrays_v10.2.1)
+!     version 7.2   july 2016: inclusion of depth-dependent micro-turbulence.
+!                   (from v7.1 in path standard_xrays_v10.2.1)
 !                   NOTE: preformal (Stark etc. profiles) not affected,
 !                   since photospheric, i.e., calculated with Min(vturb).
 !                   IN THIS FIRST VERSION, ONLY ESCAT = 0 can be treated with
 !                   vturb(r). For ESCAT = 1, use constant vturb.
-!                   UPDATE of corresponding 'ranges' still required
+!                   modification of constants C1, C2 for consistency
+!                   THIS VERSION SHOULD BE CONSISTENT WITH CMF-PATH
 !
-!           THIS VERSION SHOULD BE CONSISTENT with
-!           standard_v10.4.1/formalsol v7.2 
+!     version 7.3   oct 2020: compatible with gfortran
+!
+!     version 7.4   nov 2021: triggered by problems in OV1371, a new
+!                   approach to find suitable cont. points (for opacities
+!                   and normalization) is used (when calculating individual
+!                   profiles). Only continuum point that behave smoothly
+!                   and are not contaminated by strong features in the
+!                   pseudo background are used.
+!                   Moreover, for lines below UVLIMIT (set to 3000 A),
+!                   the interpolation of cont. opacities and source-functions
+!                   is performed in the observer's frame (contrasted to the
+!                   CMF for optical/IR ranges), to avoid spurious results.
+!                   Finally, the consistency with the FLUXCONT output
+!                   is checked (differences arise because of differential
+!                   vs. integral methods). If an unreasonably large
+!                   inconsistency is found, the corresponding output
+!                   profile-file contains only zeros for cont. fluxes
+!                   and profiles. 
+!
+!     version 7.4.1 nov 2022: inclusion of Lemke's Stark broadening for
+!                   potentially all hydrogen levels
+!                   default: Balmer-lines + important HeII lines: Butler
+!                            Paschen & Brackett lines until 
+!                            upper level = 10: Lemke (correct)
+!                            other hydrogen and HeII lines: Griem
+!
+!     version 7.4.2 jan 2023 -- affects only optically thick clumping:
+!                    bug found in contin (identified by Miguel).
+!                    Whenever a large number of components, opac was no
+!                    longer correctly corrected, and continuum opacity
+!                    became too small. Bug cured now, but there is still
+!                    a certain inconsistency between the pure continuum
+!                    case and the coupled transfer line+continuum. In
+!                    the latter case, the opac-correction would need to
+!                    be done frequency dependent, which is currently not
+!                    possible.
+!
+!!! WARNING !!!!
+! for future calculations, remember that opac_nolines is mean, not
+! effective opacity
+!!! WARNING !!!!
 !
 !----------------------------------------------------------------------
 !
@@ -237,7 +265,7 @@ IMPLICIT NONE
 !
 !
 INTEGER(I4B), PARAMETER :: MAXNO=500  
-INTEGER(I4B), PARAMETER :: MAXNCOMP=70  
+INTEGER(I4B), PARAMETER :: MAXNCOMP=10  
 INTEGER(I4B), PARAMETER :: ND1=ID_NDEPT  
 INTEGER(I4B), PARAMETER :: NDM=ID_DEPFI,LTOM=2*NDM,NC=ID_CORES
 INTEGER(I4B), PARAMETER :: NP=NC+2+4*ID_NOCOR  
@@ -247,19 +275,21 @@ INTEGER(I4B), PARAMETER :: MAXW=ID_MAXWW,MAXT=ID_MAXTT,MAXNE=ID_MAXNE, &
 !     ..
 !     .. local scalars ..
 REAL(DP) ::  DELTA,DELTAX,REALO,RMAX,SR,SRVMAX,RELXMAX, &
-&                 TEM,TGRAD,VSINI,VTURB1,XCBLUE,XCRED,YHE,DUM,DUM1, &
-&                 LAM_BLU, LAM_RED, RESOL, TIME_CPU, &
-&                 VTMI, VTMA
+&                 TEM,TGRAD,VSINI,VTURB1,XCBLUE,XCRED,YHE,DUM,DUM1,VTMI,VTMA
 INTEGER(I4B) ::  I,I1,I2,I3,IESCAT,INTEG,IS,ITURB, &
-&        IU,L,NB,NCH,NCO,NLI,NLIN,NSUM,J,ND,IBLU,IRED
+&        IU,L,NB,NCH,NCO,NLI,NLIN,NSUM,J,ND
 
-LOGICAL ESCAT,OPTIOV,EXI,ESCAT_UV,FIRST
+LOGICAL ESCAT,OPTIOV
 
-LOGICAL BALMER_LEMKE  
-! if true, Balmer Stark profiles from Lemke will be used 
+LOGICAL BALMER_LEMKE, PB_LEMKE  
+! if true, Balmer and or Paschen/Brackett Stark profiles
+! from Lemke will be used until nu=10, otherwise (nu>10) Griem
+! BALMER_LEMKE only for specific tests (default false),
+! PB=Paschen/Brackett default true, otherwise Griem-broadening
+! for all upper levels
 
-CHARACTER DC*6,KEY*6,SPEC*11,RET*4,SPEC1*18  
-CHARACTER BROAD_BALMER*6,VTURB_STR*60
+CHARACTER DC*6,KEY*6,SPEC*11,RET*4  
+CHARACTER BROAD_BALMER*6,BROAD_PB*6,VTURB_STR*60
 !     ..
 !     .. local arrays ..
 REAL(DP) ::       DVDR(NDM),P(NP),PROFABS(NFOBS), &
@@ -269,14 +299,11 @@ REAL(DP) ::       DVDR(NDM),P(NP),PROFABS(NFOBS), &
 &                 Z(NDM,NP),ZG(NP,NFOBS),ZRAY(LTOM), &
 &                 OPACON(NDM,2),SCONT(NDM,2),OPACRAY(LTOM,2),SCONRAY(LTOM,2), &
 &                 AIC(NFOBS,2), &
-&                 CLF_TEST(ND1),FVEL(ND1),HPOR(ND1),FVOL(ND1), &
-&                 V1(ND1),DVDR1(ND1),TEMP1(ND1)
+&                 CLF_TEST(ND1),FVEL(ND1),HPOR(ND1),FVOL(ND1)
 
 INTEGER(I4B) ::  INDEX1(ND1), LMAX(NP), LTOT(NP), NCOMP(MAXNO)
 
 INTEGER(I4B) :: LINENO(MAXNCOMP,MAXNO),NSTARKL(MAXNCOMP,MAXNO)
-
-REAL(DP) :: XLAM_BLU(MAXNO), XLAM_RED(MAXNO), XRESOL(MAXNO)
 
 CHARACTER LEVEL(MAXNCOMP,MAXNO)*6,LEVEU(MAXNCOMP,MAXNO)*6,LINES(MAXNO)*20  
 
@@ -297,7 +324,6 @@ EXTERNAL CONTIN,ELSCAT,FFRACC,FFRCDC,FFRKEY,FFRNCD,FFRNUM,FORMAL, &
 !     .. intrinsic functions ..
 INTRINSIC ABS,CHAR,INDEX,INT,SQRT  
 !     ..
-FIRST=.TRUE.
 
 PRINT *,' INPUT CATALOGUE NAME FOR FORMAL CALC.'  
 READ (*,FMT='(A)') FILE
@@ -318,29 +344,46 @@ GOTO 20
 20 PRINT *,' INPUT IESCAT (=0, NO; = 1 WITH ESCAT)'  
 
 IF(VTMI.EQ.0.D0 .AND. VTMA.NE.0.D0) &
-  STOP' VTURBMIN = 0 AND VTURBMAX NE 0! NOT ALLOWED'
+  STOP ' VTURBMIN = 0 AND VTURBMAX NE 0! NOT ALLOWED'
 
 READ (*,FMT=*) IESCAT  
 IF(IESCAT.EQ.1 .AND. VTMI.NE.VTMA) &
-  STOP' DEPTH DEPENDENT TURBULENCE ONLY FOR NO ESCAT'
+  STOP ' DEPTH DEPENDENT TURBULENCE ONLY FOR NO ESCAT'
 
 VTURB = VTMI*1.D5 ! for photosphere
 !VTURBMIN and VTURBMAX will obtain correct units in sub. MODEL
 
 BROAD_BALMER='BUTLER'
+!BROAD_BALMER='LEMKE'
 !uncomment for tests with Lemke broadening functions
-!PRINT *,' IN CASE, SPECIFY STARK BROADENING OF BALMER LINES:'
+!PRINT *,' IN CASE, SPECIFY STARK BROADENING FOR BALMER LINES:'
 !PRINT *,' BUTLER (default) or LEMKE'
 !READ (*,FMT='(A)',END=5) BROAD_BALMER
 
 !5 IF(BROAD_BALMER.EQ.'') BROAD_BALMER ='BUTLER'
 
-IF(BROAD_BALMER.NE.'BUTLER' .AND. BROAD_BALMER.NE.'LEMKE ') STOP' WRONG BALMER BROADENING'
+BROAD_PB='GRIEM'
+!BROAD_PB='LEMKE'
+!uncomment for tests with Lemke broadening functions
+!PRINT *,' IN CASE, SPECIFY STARK BROADENING FOR PASCHEN/BRACKETT LINES:'
+!PRINT *,' GRIEM(DEFAULT FROM NU=11 ALWAYS) or LEMKE (DEFAULT UNTIL NU=10)'
+!READ (*,FMT='(A)',END=6) BROAD_PB
+
+!6 IF(BROAD_PB.EQ.'') BROAD_PB ='LEMKE'
+
+IF(BROAD_BALMER.NE.'BUTLER' .AND. BROAD_BALMER.NE.'LEMKE ') STOP ' WRONG BALMER BROADENING'
+IF(BROAD_PB .NE.'GRIEM'  .AND. BROAD_PB .NE.'LEMKE ') STOP ' WRONG PASCHEN/BRACKETT BROADENING'
  
 BALMER_LEMKE=.FALSE.
 IF (BROAD_BALMER.EQ.'LEMKE') BALMER_LEMKE=.TRUE.
 
 PRINT*,' BALMER LINE BROADENING FOLLOWING ',BROAD_BALMER
+
+PB_LEMKE=.FALSE.
+IF (BROAD_PB.EQ.'LEMKE') PB_LEMKE=.TRUE.
+
+PRINT*,' PASCHEN/BRACKETT LINE BROADENING (UNTIL NU=10) FOLLOWING ',BROAD_PB
+PRINT*,' PASCHEN/BRACKETT LINE BROADENING (FROM  NU=11) FOLLOWING GRIEM'
 
 DC = ':T'  
 
@@ -397,8 +440,6 @@ END SELECT
 
 PRINT *,LINES(NLIN)  
 
-IF(TRIM(LINES(NLIN)).NE.'UV') THEN
-! standard treatment
 CALL FFRNUM(REALO,NCO,RET)  
 IF (ON_ERROR(RET)) GOTO 120
 
@@ -423,26 +464,6 @@ DO I = 1,NCO
 
 END DO  
 
-ELSE
-! spectral range
-     CALL FFRNUM(REALO,INTEG,RET)  
-     IF (ON_ERROR(RET)) GOTO 120
-     XLAM_BLU(NLIN) = REALO 
-
-     CALL FFRNUM(REALO,INTEG,RET)  
-     IF (ON_ERROR(RET)) GOTO 120
-     XLAM_RED(NLIN) = REALO 
-
-     CALL FFRNUM(REALO,INTEG,RET)  
-     IF (ON_ERROR(RET)) GOTO 120
-     XRESOL(NLIN) = REALO 
-     
-     DELTA=XLAM_RED(NLIN)-XLAM_BLU(NLIN)
-     IF(DELTA.LE.0.D0) STOP' LAMBDA_BLUE > LAMBDA_RED, MODIFY INPUT'
-     IF(DELTA.LE.RESOL) STOP' RESOL TOO LARGE, MODIFY INPUT'
-     
-ENDIF
-  
 END DO COMPLOOP
 !
 !     end of file formal-input
@@ -460,10 +481,8 @@ CLOSE(1)
 
 ALL_LINES: DO NLI = 1,NLIN  
 
-  IF(TRIM(LINES(NLI)).NE.'UV') THEN
-! standard treatment  
      NCO = NCOMP(NLI)  
-     IF (NCO .GT. MAXNCOMP) STOP' TOO MANY COMPONENTS (INCREASE MAXNCOMP)'
+     IF (NCO .GT. MAXNCOMP) STOP ' TOO MANY COMPONENTS (> 10)'
      
      ALLOCATE(INVERTED(ID_NDEPT,NCO))
      ALLOCATE(GAMMAL(NCO),GAMMAC(NCO),WEIG(NCO),XNUE(NCO))
@@ -489,8 +508,7 @@ ALL_LINES: DO NLI = 1,NLIN
 !---- begin of calculation for different lines
 !---- for PREFORMAL, WE USE ONLY VTURB = VTURBMIN
 !
-!    ARGUMENT .FALSE. CORRESPONDS TO SRANGE IN PREFORMAL
-     CALL PREFORMAL(FILE,NCO,LEVEL(1,NLI),LEVEU(1,NLI),LINENO(1,NLI),NSTARK,VTURB,YHE,BALMER_LEMKE,.FALSE.)
+     CALL PREFORMAL(FILE,NCO,LEVEL(1,NLI),LEVEU(1,NLI),LINENO(1,NLI),NSTARK,VTURB,YHE,BALMER_LEMKE,PB_LEMKE)
 
      OPEN (1,FILE=TRIM(FILE)//'/IX.DAT',STATUS='UNKNOWN')  
      REWIND 1  
@@ -509,7 +527,7 @@ ALL_LINES: DO NLI = 1,NLIN
      CLOSE (1)  
 !
 ! approximate treatment so far only for ESCAT = .FALSE.
-     IF (AT.AND.ESCAT) STOP' Approximate Treatment (AT) AND ESCAT NOT POSSIBLE YET'
+     IF (AT.AND.ESCAT) STOP ' Approximate Treatment (AT) AND ESCAT NOT POSSIBLE YET'
 
 !Read in clumping params from OUTPUT_CLUMPING
      OPEN (1,FILE=TRIM(FILE)//'/CLUMPING_OUTPUT',STATUS='OLD')
@@ -562,7 +580,7 @@ ALL_LINES: DO NLI = 1,NLIN
 
           OPEN (2,FILE=TRIM(FILE)//'/OUT.'//LINE(1:IS-1)//'_'//SPEC, &
 &           STATUS='UNKNOWN')
-       END IF
+     END IF  
 !
 !------------------------------------
 !
@@ -597,14 +615,17 @@ ALL_LINES: DO NLI = 1,NLIN
 !---- hence: first digit in nsum: number of voigt components
 !----          2nd digit in nsum: number of stark components
 !
-     IF (ESCAT) CALL ELSCAT(XNUE,NL,NU,GFLU,GL,GU,NB)  
-!
+     IF (ESCAT) THEN
+       IF(1.D8/XNUE(1).LT.UVLIMIT) &
+&       STOP ' ELECTRON SCATTERING ONLY POSSIBLE FOR LAM > UVLIMIT'
+       CALL ELSCAT(XNUE,NL,NU,GFLU,GL,GU,NB)  
+     ENDIF
 
      WRITE (*,FMT=9000) LINE  
      PRINT *  
      PRINT *,'VSINI: ',VSINI,' KM/S, VTURBMIN: ',VTURB*1.D-5,' KM/S'  
 
-     CALL MODEL(R1,R,V1,V,DVDR1,RHO,RMAX,NDM,ND,VMAX,VDOP,INDEX1, &
+     CALL MODEL(R1,R,V,RHO,RMAX,NDM,ND,VMAX,VDOP,INDEX1, &
       SRVMAX,SR,NB,XNE,CLF,CLF_TEST,VTMI,VTMA)
 !
 !    from here on, VDOP is correct (at TEFF, corrected for VTURB), in VMAX
@@ -614,10 +635,10 @@ ALL_LINES: DO NLI = 1,NLIN
 ! changed from v 6.0, since x-grid w.r.t. xnue(1)
      IF (NB.GE.2) THEN
        DELTA = (XNUE(1)-XNUE(NB))/XNUE(1)*CLIGHT/VMAX
-       IF(DELTA.LE.0.D0) STOP' ERROR IN DELTA'
+       IF(DELTA.LE.0.D0) STOP ' ERROR IN DELTA'
        DO I=2,NB-1
          DELTAARR(I) = (XNUE(1)-XNUE(I))/XNUE(1)*CLIGHT/VMAX
-         IF(DELTAARR(I).LE.0.D0) STOP' ERROR IN DELTA'
+         IF(DELTAARR(I).LE.0.D0) STOP ' ERROR IN DELTA'
        ENDDO
        DELTAARR(NB)=DELTA
      ENDIF
@@ -630,6 +651,9 @@ ALL_LINES: DO NLI = 1,NLIN
      CALL CONTIN(XNUE,NL,NU,GFLU,SRVMAX,INDEX1,R,OPAL,OPACON, &
       SLINE, SCONT,GL,GU,NB,SR,XCRED,XCBLUE,TEM,TGRAD,XMAX, &
       XMAXDOP,XMAXDOP_MIN,TEMP,XNE,XNEFI,CLF,ESCAT)
+
+! no profile will be calculated:
+     IF(KLOW.EQ.-1 .AND. KUP.EQ.-1) GOTO 100
 !
 !---- determination of the implicit overlapping option
 !
@@ -663,22 +687,18 @@ ALL_LINES: DO NLI = 1,NLIN
        RELXMAX=XMAX(NB)/XMAX(1)
        XMAX(1)=(DELTA+0.01)/(1.+RELXMAX)
        XMAX(NB)=XMAX(1)*RELXMAX
-       GOTO 99 
-    ENDIF  
+       GOTO 99
+     ENDIF  
 !
 !-----formal integral
-    !
-              !JS-NEW: ADDING INTENSITY AS OUTPUT 
-      OPEN (22,FILE=TRIM(FILE)//'/OUT_IEM.'//LINE(1:IS-1), &
-           &                STATUS= 'UNKNOWN')
-      CALL FORMAL(ND,NP,NC,NB,NFOBS,RMAX,DELTA,ESCAT,R1,R,V,OPAL, &
+!
+100  CALL FORMAL(ND,NP,NC,NB,NFOBS,RMAX,DELTA,ESCAT,R1,R,V,OPAL, &
       SLINE,P,Z,LMAX,X0,VMAX,OPALRAY,SRAY,ZRAY,VTURBRAY,LTOT, XCMF,PROFILE, &
-      PROFABS,PROFEM,ZG,AIC,XMAX,XMAXDOP,XMAXDOP_MIN,OPTIOV,NSUM,OPACON, &
+      PROFABS,PROFEM,ZG,AIC,XMAX,XMAXDOP,XMAXDOP_MIN, OPTIOV,NSUM,OPACON, &
       OPACRAY,SCONT,SCONRAY,TEM, XCRED,XCBLUE,TGRAD,XNUE(1),VDOP, &
       TEMP,XNEFI,PROFROT,VSINI,DELTAARR)
-     CLOSE (2)
-     !JS-NEW APR 2018 - INTENSITY OUTPUT 
-     CLOSE (22) 
+
+     CLOSE (2)  
 
      DEALLOCATE(INVERTED)
      DEALLOCATE(GAMMAL,GAMMAC,WEIG,XNUE)
@@ -693,127 +713,7 @@ ALL_LINES: DO NLI = 1,NLIN
 
      DEALLOCATE(OPALRAY,SRAY,XCMF,VTURBRAY)
 
-  ELSE
-! spectral range
-! so far, constant vturb and no incoherent e-scat
-     IF(VTMI.NE.VTMA) STOP' DEPTH DEPENDENT TURBULENCE ONLY FOR STANDARD APPROACH'
-     
-     LAM_BLU=XLAM_BLU(NLI)
-     LAM_RED=XLAM_RED(NLI)
-     RESOL=XRESOL(NLI)
-     
-     ESCAT_UV=.FALSE.
-!     IF(VTURB.LT.5.D0) STOP' UV AND VTURB < 5 KM/S'
-     IF(VTURB.LT.1.D0) STOP' UV AND VTURB < 1 KM/S'
-     
-     INQUIRE(FILE=TRIM(FILE)//'/CONT_FORMAL_CMF', EXIST=EXI)
-     IF(.NOT.EXI) STOP' UV range not possible, since CONT_FORMAL_CMF not existent!'
-
-     NB=1
-     ALLOCATE(VDOP(NB))
-     ALLOCATE(OPALRAY(LTOM,1),SRAY(LTOM,1))
-     
-!Read in clumping params from OUTPUT_CLUMPING
-     OPEN (1,FILE=TRIM(FILE)//'/CLUMPING_OUTPUT',STATUS='OLD')
-     READ(1,*) !header
-     DO I=1,ND1 
-        READ(1,FMT=*) J,DUM1,DUM1,DUM1,CLF_TEST(I),FIC(I),FVEL(I),HPOR(I),FVOL(I),&
-&                TCL_FAC_LINE(I),TCL_FAC_CONT(I)
-     ENDDO
-     CLOSE(1) 
-
-     OPTTHICK=.TRUE.
-     IF(MAXVAL(TCL_FAC_LINE).EQ.0. .AND. MAXVAL(TCL_FAC_CONT).EQ.0.) OPTTHICK=.FALSE. 
-     IF(OPTTHICK) THEN
-       PRINT*
-       PRINT*,'MODEL WITH OPTICALLY THICK CLUMPING'
-     ENDIF  
-!
-!
-!------------------------------------
-!     output-filename and open output
-!
-     LINE=LINES(NLI)
-     IS = INDEX(LINE,' ')  
-     VTURB1 = VTURB*1.D-5
-     IF(RESOL.LT.10.) THEN
-       WRITE(SPEC1,FMT='(I5.5,A1,I5.5,A2,F5.3)') INT(LAM_BLU),'_',INT(LAM_RED),'__',RESOL
-     ELSE IF(RESOL.LT.100.) THEN
-       WRITE(SPEC1,FMT='(I5.5,A1,I5.5,A1,F6.3)') INT(LAM_BLU),'_',INT(LAM_RED),'_',RESOL
-     ELSE
-       STOP' RESOL TOO LARGE, CHANGE FORMAT'
-     ENDIF  
-     
-     IF (VTURB1.EQ.0.) THEN  
-          IF (ESCAT_UV) THEN  
-               SPEC = 'ESC'  
-               OPEN (2,FILE=TRIM(FILE)//'/OUT.'//LINE(1:IS-1)//'_'// &
-&                SPEC1//'_'//SPEC, STATUS='UNKNOWN')
-          ELSE  
-               SPEC = ' '  
-               OPEN (2,FILE=TRIM(FILE)//'/OUT.'//LINE(1:IS-1)//'_'//SPEC1, &
-&                STATUS= 'UNKNOWN')
-          END IF  
-     ELSE  
-          ITURB = INT(VTURB1)  
-          IF (ITURB.GE.1000) STOP ' VTURB > 1000 KM/S'  
-          I1 = ITURB/100  
-          I2 = (ITURB-I1*100)/10  
-          I3 = ITURB - I1*100 - I2*10  
-
-          IF (ESCAT_UV) THEN  
-               SPEC = 'ESC_VT'//CHAR(48+I1)//CHAR(48+I2)//CHAR(48+I3)
-          ELSE  
-               SPEC = 'VT'//CHAR(48+I1)//CHAR(48+I2)//CHAR(48+I3)  
-          END IF  
-
-          OPEN (2,FILE=TRIM(FILE)//'/OUT.'//LINE(1:IS-1)//'_'//SPEC1//'_'//SPEC, &
-&           STATUS='UNKNOWN')
-       END IF
-
-     WRITE (*,FMT=9000) LINE  
-     PRINT*,' SPECTRAL RANGE:',LAM_BLU,' ',LAM_RED
-     PRINT*,' RESOL = ',RESOL,' ANGSTROM' 
-     PRINT *  
-     PRINT *,'VSINI: ',VSINI,' KM/S, VTURB: ',VTURB*1.D-5,' KM/S'  
-
-!----mass dependent part of VDOP (rest is calculated in subroutine model)
-     VDOP(NB)=0.
-     CALL MODEL(R1,R,V1,V,DVDR1,RHO,RMAX,NDM,ND,VMAX,VDOP,INDEX1, &
-      SRVMAX,SR,NB,XNE,CLF,CLF_TEST,VTMI,VTMA)
-!on output, vdop(nb)=vdop(1)=vturb/vinf
-
-     
-     IF(FIRST) THEN
-! call prince only once! (2nd call will not work)
-       CALL PRINCE
-       FIRST=.FALSE.
-     ENDIF  
-     
-     CALL CALC_LINES(ND1,XNE,TEMP1,CLF,R1,V1,DVDR1,SR,SRVMAX, &
-&                    LAM_BLU,LAM_RED,IBLU,IRED, &
-&                    VTURB,YHE,BALMER_LEMKE,MAXNCOMP)
-
-     CALL FORMAL_RANGE(ND,NP,NC,VDOP(NB),RMAX,R,P,Z,V,LTOT,LMAX, &
- &                     R1,V1,XNE,TEMP1,INDEX1,IBLU,IRED, &
- &                     LAM_BLU,LAM_RED,RESOL,SR,VMAX, &
- &                     OPACON,SCONT, &
- &                     ZRAY,OPACRAY(1,1),SCONRAY(1,1),OPALRAY(1,1),SRAY(1,1))
-     
-     CLOSE(2)
-
-     DEALLOCATE(VDOP,OPALRAY,SRAY)
-     CALL DEALLOC
-!     PRINT*,' ALL ARRAYS DEALLOCATED'
-     PRINT*
-     
-  ENDIF
-
 END DO ALL_LINES  
-
-CALL CPU_TIME(TIME_CPU) 
-PRINT*
-PRINT* , ' CPU time: ',TIME_CPU 
 
 STOP  
 !
@@ -869,7 +769,8 @@ USE nlte_type
 USE nlte_dim
 USE fund_const, ONLY: CLIGHT
 USE formalsol_var, ONLY: GAMMAL,GAMMAC,XCMFE,SCONTE,NFCMF,VTURB,FILE,INVERTED, &
-&                        FIC,TCL_FAC_LINE,TCL_FAC_CONT,OPTTHICK
+&                        FIC,TCL_FAC_LINE,TCL_FAC_CONT,OPTTHICK, &
+&                        KLOW, KUP, FCONTLOW, FCONTUP, LAMTRANS, UVLIMIT
 
 USE preformal_var, ONLY: AT,NLEVH21
 IMPLICIT NONE
@@ -888,7 +789,7 @@ REAL(DP), PARAMETER :: C1 = 0.02654D0, C2 = 3.97285D-16
 
 !     ..
 !     .. scalar arguments ..
-REAL(DP) ::  SR,SRVMAX,TEM,TGRAD,XCBLUE,XCRED  
+REAL(DP) ::  SR,SRVMAX,TEM,TGRAD,XCBLUE,XCRED
 INTEGER(I4B) ::  NB  
 LOGICAL ESCAT  
 !     ..
@@ -896,7 +797,7 @@ LOGICAL ESCAT
 REAL(DP) ::  GFLU(NB),GL(NB),GU(NB),OPACON(ND1,2),OPAL(ND1,NB), &
 &                 R(ND1),SCONT(ND1,2),SLINE(ND1,NB),TEMP(ND1), &
 &                 XMAX(NB),XMAXDOP(NB),XMAXDOP_MIN(NB), &
-&                 XNE(ND),XNEFI(ND1),CLF(ND),XNUE(NB)
+&                 XNE(ND),XNEFI(ND1),CLF(ND),XNUE(NB),OPACNEW(ND1,2)
 
 INTEGER(I4B) ::  INDEX1(ND),NL(NB),NU(NB)  
 !     ..
@@ -904,18 +805,22 @@ INTEGER(I4B) ::  INDEX1(ND),NL(NB),NU(NB)
 REAL(DP) ::  AUX,DUMMY,FACTOR,OC,OC1,OC2,OL,OL1, &
 &                 OL2,OLE,OOPA,RLJ,RLJ1,RLJ2,SC,SC1,SC2,SL,SL1,SL2, &
 &                 SLE,TL,TL1,TL2,XKL,XL,XL1,XL2,XNL,XNU,XXX, &
-&                 OOPA1,TAUCON,DEPL,DEPU
+&                 OOPA1,TAUCON,DEPL,DEPU, &
+&                 DUMFLOAT,XMED,LIMLOW,LIMUP,LIMLOWT,LIMUPT,DX1,DX2,FMED,EFF
 
 REAL(DP) :: TCL,FAC2,EFF_RAT_INT
 
 INTEGER(I4B) ::  I,IK,J,J1,J2,K,K0,KI, &
-&                L,LI,NFRE,NREC,NRECET,NX,ITAUC1,IFRE
+&                L,LI,NFRE,NREC,NRECET,NX,ITAUC1,IFRE,DUMINT,imin,imax
 !     ..
 !     .. local arrays ..
 REAL(DP) ::  BLEVEL(ID_LLEVS),ALEVEL(ID_LLEVS), &
 &            FREQC(IFRETOT),OPAC(ND,IFRETOT), &
 &            SCON(ND,IFRETOT),T(ND), &
-&            TAUROSS(ND),XNELTE(ND)
+&            TAUROSS(ND),XNELTE(ND), &
+&            LAM(IFRETOT),LOGFNU(IFRETOT),RTAU1(IFRETOT)
+
+INTEGER(I4B) :: NO(IFRETOT)
 
 REAL(DP), DIMENSION(ND,NB) :: EFF_RAT 
 REAL(DP), DIMENSION(ND,IFRETOT) :: OPA_EFF_RAT
@@ -935,12 +840,12 @@ INTRINSIC ABS,EXP,LOG,SIGN
 !cw----depthl: depth of maximal 'linestrength'
 !
 !consistency check for approximate treatment (AT)
-IF (.NOT.AT .AND. NLEVH21.NE.0) STOP' NOT AT AND NLEVH21 NE 0'
+IF (.NOT.AT .AND. NLEVH21.NE.0) STOP ' NOT AT AND NLEVH21 NE 0'
 IF (AT) THEN
-   IF (NLEVH21.EQ.0) STOP' AT AND NLEVH21 EQ 0'
-   IF (NL(1).NE.ID_LLEVS+1) STOP' AT: ERROR IN NL'
-   IF (NU(1).NE.ID_LLEVS+2) STOP' AT: ERROR IN NU'
-   IF (NB.NE.1) STOP' AT: ERROR IN NB'
+   IF (NLEVH21.EQ.0) STOP ' AT AND NLEVH21 EQ 0'
+   IF (NL(1).NE.ID_LLEVS+1) STOP ' AT: ERROR IN NL'
+   IF (NU(1).NE.ID_LLEVS+2) STOP ' AT: ERROR IN NU'
+   IF (NB.NE.1) STOP ' AT: ERROR IN NB'
 ENDIF
 
 ALLOCATE(DEPTHL(NB),XMAXL(NB),XLAMB(NB))
@@ -958,28 +863,17 @@ READ (1) NFRE, (FREQC(I),I=1,IFRETOT), &
 &  ((OPA_EFF_RAT(I,J),I=1,ND),J=1,IFRETOT)
 CLOSE (1)  
 
-! for tests, when individual lines are compared with those from the
-! complete approach and should be identical
-!OPEN (1,FILE=TRIM(FILE)//'/CONT_FORMAL_CMF',STATUS='OLD',FORM='UNFORMATTED')  
-!REWIND 1  
-!READ (1) ((SCON(I,J),I=1,ND),J=1,IFRETOT), &
-!&  ((OPAC(I,J),I=1,ND),J=1,IFRETOT)
-!CLOSE (1)  
-
 !CHECK CONSISTENCY
 DO I=1,IFRETOT
   IF(FREQC(I).EQ.0.) EXIT
-ENDDO  
+ENDDO
 IFRE=I
-
-!do i=1,nd
-!  do j=1,ifretot
-!    print*,i,j,opa_eff_rat(i,j)
-!  enddo
-!enddo  
+! here might be a bug. Sometimes, the frequency files are longer than
+! NFRE (because of previous iterations with more freq. points. Valid
+! data are only until nfre. Nevertheless, ifre only used here
 
 IF(.NOT.OPTTHICK.AND.MAXVAL(ABS(OPA_EFF_RAT(1:ND,1:IFRE)-1.D0)).GT.1.D-6) &
-  STOP' OPTICALLY THIN CLUMPING AND OPA_EFF_RAT NE 1, subr. contin!!!'
+  STOP ' OPTICALLY THIN CLUMPING AND OPA_EFF_RAT NE 1, subr. contin!!!'
 
 TEM = T(ND)  
 
@@ -991,10 +885,6 @@ DO L = 1,ND
 END DO  
 CLOSE (1)
 ENDIF
-
-
-OPEN (1,FILE=TRIM(FILE)//'/NLTE_POP',STATUS='OLD',ACCESS='DIRECT',RECL=NRECET)
-OPEN (11,FILE=TRIM(FILE)//'/LTE_POP',STATUS='OLD',ACCESS='DIRECT',RECL=NRECET)
 !
 !---- xnue in cm-1
 !---- it is assumed without any check that xnue(1) > xnue(2) (i.e.,
@@ -1010,13 +900,164 @@ DO WHILE (XNUE(1).LT.XXX)
    K0=K0-1  
    XXX=FREQC(K0)  
 END DO  
+
+! check whether pseudo continuum is smooth
+! around line, and define suitable cont. frequencies. 
+LAMTRANS=1.D8/XNUE(1)
+PRINT* 
+PRINT*,' CHECK CONTINUUM BEHAVIOUR (VIA FLUXCONT)'
+  
+OPEN (1,FILE=TRIM(FILE)//'/FLUXCONT',STATUS='OLD')
+READ (1,*) ! FIRST LINE WITH COMMENTS
+DO I=1,NFRE
+  READ(1,*,END=10,ERR=10) &
+&    NO(I),LAM(I),LOGFNU(I),DUMFLOAT,DUMFLOAT,DUMFLOAT,DUMINT,RTAU1(I)
+ENDDO  
+CLOSE(1)
+GOTO 15
+
+10 STOP ' PROBLEMS IN READING FLUXCONT '
+
+15 CONTINUE
+!PRINT*,LAM(1),LOGFNU(1),RTAU1(1)
+!PRINT*,LAM(NFRE),LOGFNU(NFRE),RTAU1(NFRE)
+!PRINT*,LAM(K0)
+IF (K0.LT.11 .OR. NFRE-K0.LT.11) STOP ' LINE LOCATED TOO CLOSE TO WAVELENGTH BORDERS'
+
+DO I=K0,1,-1
+  IF(LAM(I)-LAMTRANS.GT.20.) EXIT
+ENDDO
+IMIN=I
+! not for optical lines; otherwise, problem with Balmerjump
+IF(LAMTRANS.LT.UVLIMIT) IMIN=MIN(K0-10,IMIN)
+
+DO I=K0+1,NFRE
+  IF(LAMTRANS-LAM(I).GT.20.) EXIT
+ENDDO
+IMAX=I
+! not for optical lines; otherwise, problem with Balmerjump
+IF(LAMTRANS.LT.UVLIMIT) IMAX=MAX(K0+10,IMAX)
+
+PRINT*,' TRANSITION AT ',LAMTRANS
+PRINT*,' CONSIDERED WAVEL. RANGE FOR MEDIAN = ',LAM(IMAX),LAM(IMIN)
+
+CALL MEDIAN(LOGFNU(IMIN:IMAX),IMAX-IMIN+1,FMED)
+PRINT*,' RANGE OF LOG FNUE AROUND LINE:'
+PRINT*,MINVAL(LOGFNU(IMIN:IMAX)),MAXVAL(LOGFNU(IMIN:IMAX))
+PRINT*,' MEDIAN: ',FMED
+
+!ALLOW FOR 0.05 DEX VARIATION IN LOGFNU
+LIMLOW=FMED - 0.05
+LIMUP= FMED + 0.05
+
+CALL MEDIAN(RTAU1(K0-10:K0+10),21,XMED)
+PRINT*,' RANGE OF R(TAU=1) AROUND LINE:'
+PRINT*,MINVAL(RTAU1(K0-10:K0+10)),MAXVAL(RTAU1(K0-10:K0+10))
+PRINT*,' MEDIAN: ',XMED
+
+!ALLOW FOR 20% VARIATION IN R(TAU=1)
+LIMLOWT=XMED - 0.2D0*(XMED-1.D0) 
+LIMUPT= XMED + 0.2D0*(XMED-1.D0)
+
+IF(IMAX-IMIN.EQ.1) THEN
+  LIMLOWT=MIN(LIMLOWT,RTAU1(IMIN),RTAU1(IMAX))
+  LIMUPT=MAX(LIMUPT,RTAU1(IMIN),RTAU1(IMAX))
+  PRINT*,' ALLOWED RANGE OF RTAU1-VALUES RESET TO ',LIMLOWT,LIMUPT
+ENDIF  
+
+!PRINT*,LIMLOW,LIMUP
+!FIND UPPER WAVELENGTH POINT KLOW LE K0
+DO I=K0,IMIN,-1
+  IF (LOGFNU(I).GE.LIMLOW .AND. LOGFNU(I).LE.LIMUP .AND. &
+     RTAU1(I).GE.LIMLOWT .AND. RTAU1(I).LE.LIMUPT) GOTO 20
+!  print*,k0,imin,imax,i
+!  print*,logfnu(i),limlow,limup
+!  print*,rtau1(i),limlowt,limupt
+!  print*
+ENDDO  
+PRINT*,' NO SUITABLE CONTINUUM POINT FOUND IN THE UPPER WAVEL. RANGE' 
+KLOW=-1
+KUP=-1
+RETURN
+
+20 KLOW=I
+!PRINT*,K0,KLOW,LAM(KLOW)
+
+!FIND LOWER WAVELENGTH POINT KUP GT K0
+DO I=K0+1,IMAX
+  IF (LOGFNU(I).GE.LIMLOW .AND. LOGFNU(I).LE.LIMUP .AND. &
+     RTAU1(I).GE.LIMLOWT .AND. RTAU1(I).LE.LIMUPT) GOTO 25
+ENDDO  
+PRINT*,' NO SUITABLE CONTINUUM POINT FOUND IN THE LOWER WAVEL. RANGE' 
+KLOW=-1
+KUP=-1
+RETURN
+
+25 KUP=I
+!PRINT*,K0,KUP,LAM(KUP)
+!IF SEPARATION TOO LARGE IN THE UV, PERFORM NO INTERPOLATION,
+!BUT USE CLOSER POINT'
+
+IF(LAMTRANS.LT.UVLIMIT) THEN
+
+  IF(LAM(KLOW)-LAM(KUP).GT.20.) THEN
+    DX1=LAM(KLOW)-LAM(K0)
+    DX2=LAM(K0)-LAM(KUP)
+    IF(DX1.LT.DX2) THEN
+      KUP=KLOW
+    ELSE
+      KLOW=KUP
+    ENDIF  
+
+    IF(AMIN1(DX1,DX2).GT.50.) THEN
+      PRINT*,' NO SUITABLE FREQUENCY POINT WITHIN 50 A FOUND, LINE CANNOT BE CALCULATED'
+      KLOW=-1
+      KUP=-1
+      RETURN
+    ELSE IF(AMIN1(DX1,DX2).GT.10.) THEN
+      PRINT*,' NO SUITABLE FREQUENCY POINT WITHIN 10 A FOUND, PROCEED AT OWN RISK'
+    ENDIF
+  ENDIF
+
+ELSE ! CONTINUUM AND IR SHOULD BEHAVE AS IN PREVIOUS VERSIONS, OTHERWISE RESET
+  IF(KLOW .NE. K0 .OR. KUP.NE.K0+1) THEN
+    PRINT*,' WARNING! WARNING! WARNING!'
+    PRINT*,' OPTICAL/IR LINE, AND KLOW/KUP DIFFERENT FROM K0/K0+1'
+    PRINT*,' KLOW, KUP RESET TO K0, K0+1, PROCEED AT OWN RISK'
+    PRINT*
+    KLOW=K0
+    KUP=K0+1
+!    KLOW=-1
+!    KUP=-1
+!    RETURN
+  ENDIF  
+ENDIF
+  
+PRINT*,' TRANSITION AT ',LAMTRANS
+PRINT*,' CONTINUUM TAKEN (INTERPOLATED) IN BETWEEN'
+PRINT*,LAM(KUP),LAM(KLOW),KUP,KLOW
+
+IF(KLOW.NE.K0 .OR. KUP.NE.K0+1) THEN
+  PRINT*,' WARNING! CONTINUUM POINTS MODIFIED,'
+  PRINT*,' DUE TO VARIATIONS IN FLUX AND R(TAU=1)'
+ENDIF
+  
+FCONTUP=LOGFNU(KUP)
+FCONTLOW=LOGFNU(KLOW)
+
+PRINT*,' CORRESPONDING LOG FNU VALUES FROM FLUXCONT',FCONTUP,FCONTLOW
+PRINT*
+
+
+OPEN (1,FILE=TRIM(FILE)//'/NLTE_POP',STATUS='OLD',ACCESS='DIRECT',RECL=NRECET)
+OPEN (11,FILE=TRIM(FILE)//'/LTE_POP',STATUS='OLD',ACCESS='DIRECT',RECL=NRECET)
 !
 !---- calculation of cmf-frequencies for continuum interpolation
 !---- (they corresponds to the limits of the subinterval defined
-!---- by k0 and k0+1)
+!---- by klow and KUP)
 !
-XCRED  = (FREQC(K0)-XNUE(1))*CLIGHT*SRVMAX/SR/XNUE(1)  
-XCBLUE = (FREQC(K0+1)-XNUE(1))*CLIGHT*SRVMAX/SR/XNUE(1)  
+XCRED  = (FREQC(KLOW)-XNUE(1))*CLIGHT*SRVMAX/SR/XNUE(1)  
+XCBLUE = (FREQC(KUP)-XNUE(1))*CLIGHT*SRVMAX/SR/XNUE(1)  
 !
 !---- lambda in cm
 !
@@ -1040,12 +1081,13 @@ DO I = 1,ND
      READ (1,REC=I) (BLEVEL(J),J=1,NREC)  
      READ (11,REC=I) (ALEVEL(J),J=1,NREC)  
 ! recheck
-     SCONT(INDEX1(I),1) = SCON(I,K0)  
-     SCONT(INDEX1(I),2) = SCON(I,K0+1)  
-     OPAC(I,K0) = OPAC(I,K0) / OPA_EFF_RAT(I,K0)
-     OPAC(I,K0+1) = OPAC(I,K0+1) / OPA_EFF_RAT(I,K0+1)      
-     OPACON(INDEX1(I),1) = OPAC(I,K0)*SR
-     OPACON(INDEX1(I),2) = OPAC(I,K0+1)*SR  
+     SCONT(INDEX1(I),1) = SCON(I,KLOW)  
+     SCONT(INDEX1(I),2) = SCON(I,KUP)  
+     OPAC(I,KLOW) = OPAC(I,KLOW) / OPA_EFF_RAT(I,KLOW)
+     OPAC(I,KUP) = OPAC(I,KUP) / OPA_EFF_RAT(I,KUP)      
+! JO Jan 2023 not required here, calculated below
+!     OPACON(INDEX1(I),1) = OPAC(I,KLOW)*SR
+!     OPACON(INDEX1(I),2) = OPAC(I,KUP)*SR  
 ! OPAC IS ALREADY EFFECTIVE QUANTITY, so needs to be back-corrected.
 ! Then follow philosophy  of correcting with largest TCL 
 ! -- either line or from blended line+cont BG
@@ -1055,7 +1097,7 @@ DO I = 1,ND
 ! ASSUMING RED OPACITY IS HIGHER     
 !     IF(I.LT.ND.AND.ITAUC1.EQ.0) THEN
 !     TAUCON=TAUCON+ &
-!&      .5*(OPACON(INDEX1(I),1)+OPAC(I+1,K0)*SR)* &
+!&      .5*(OPACON(INDEX1(I),1)+OPAC(I+1,KLOW)*SR)* &
 !&      (R(INDEX1(I))-R(INDEX1(I+1)))
 !     IF(TAUCON.GE.0.66) ITAUC1=I
 !     ENDIF
@@ -1090,6 +1132,7 @@ DO I = 1,ND
 
           XKL = C1*GFLU(IK)* (XNL/GL(IK)-XNU/GU(IK))  
           SLINE(INDEX1(I),IK) = C2* (XNUE(IK)**3)/(XNL/XNU*GU(IK)/GL(IK)-1.D0)
+
 !CAN BE MODIFIED FOR TESTS
 !Note: in most cases, this should give a very similar result to the "exact"
 ! approach (as long as tau_inv small, i.e., a dominating source term)
@@ -1111,20 +1154,23 @@ DO I = 1,ND
           TCL = ABS(XKL)*XLAMB(IK)*TCL_FAC_LINE(I)
 ! Note: SRVMAX term included in tcl_fac_line multiplier 
           FAC2 = (1.+FIC(I)*TCL)/(1.+TCL)
-          EFF_RAT(I,IK) = MIN (FAC2, OPA_EFF_RAT(I,K0), OPA_EFF_RAT(I,K0+1) )
+          EFF_RAT(I,IK) = MIN (FAC2, OPA_EFF_RAT(I,KLOW), OPA_EFF_RAT(I,KUP) )
           IF (EFF_RAT(I,IK).LE.0.0D0.OR.EFF_RAT(I,IK).GT.1.0D0) THEN 
             PRINT*,EFF_RAT(I,IK)
             PRINT*,TCL,FAC2,I,IK
-            STOP' OPA_EFF > <OPA>, CONTIN'
+            STOP ' OPA_EFF > <OPA>, CONTIN'
           ENDIF
           OPAL(INDEX1(I),IK) = OPAL(INDEX1(I),IK) * EFF_RAT(I,IK)
 ! Now effective line opacity, reduce continuum with *same* factor 
-          OPAC(I,K0) = OPAC(I,K0) * EFF_RAT(I,IK)
-          OPAC(I,K0+1) = OPAC(I,K0+1) * EFF_RAT(I,IK) 
-          OPACON(INDEX1(I),1) = OPAC(I,K0)*SR
-          OPACON(INDEX1(I),2) = OPAC(I,K0+1)*SR
+! JO JAN 2023: HERE WAS A BUG, CHANGED
+          OPACNEW(I,1) = OPAC(I,KLOW) * EFF_RAT(I,IK)
+! next statement actually not required, since only used for oopa at KLOW
+          OPACNEW(I,2) = OPAC(I,KUP) * EFF_RAT(I,IK) 
+! JO JAN 2023: not required here since calculated below
+!          OPACON(INDEX1(I),1) = OPAC(I,KLOW)*SR
+!          OPACON(INDEX1(I),2) = OPAC(I,KUP)*SR
 
-          OOPA = ABS(XKL*EFF_RAT(I,IK))/OPAC(I,K0)  
+          OOPA = ABS(XKL*EFF_RAT(I,IK))/OPACNEW(I,1)  
 !
 !cw----search for maximum linestrength
 !
@@ -1133,21 +1179,39 @@ DO I = 1,ND
                 XMAXL(IK) = OOPA
                 DEPTHL(IK) = I
               END IF
-          END IF
-
+          END IF 
      END DO
 
 END DO
 
+! JO JAN 2023: FOLLOWING DO-LOOP IS NEW, TO CURE PREVIOUS BUG
+! also: now opacon is original opac*SR, to be consistent with
+!       radiative transfer in nlte.
+!       in previous (buggy) version, opacon was somewhat erroneous 
+
+DO I=1,ND
+! THE NEXT STATEMENT -- IN LINE WITH ORIGINAL APPROACH -- WOULD BE AN APPROX.,
+! AND MIGHT OVERESTIMATE THE EFFECT (SINCE ONLY VALID CLOSE TO THE STRONGEST LINE).
+!  EFF=MINVAL(EFF_RAT(I,1:NB))
+!  OPAC(I,KLOW)=OPAC(I,KLOW)*EFF
+!  OPAC(I,KUP)=OPAC(I,KUP)*EFF
+! TO BE ON THE SAFE SIDE, WE USE THE SAME CORRECTED CONTINUUM AS IN NLTE
+! NEEDS TO BE CAREFULLY TESTED (CONSISTENCY TEST IS ALREADY DONE).
+  OPAC(I,KLOW)=OPAC(I,KLOW)*OPA_EFF_RAT(I,KLOW)
+  OPAC(I,KUP)=OPAC(I,KUP)*OPA_EFF_RAT(I,KUP)
+  OPACON(INDEX1(I),1) = OPAC(I,KLOW)*SR
+  OPACON(INDEX1(I),2) = OPAC(I,KUP)*SR
+ENDDO  
+  
 ! Need to calculate TAUCON scale here, since might have been modified,
 ! and OPAC(I+1) only known after end of previous I loop 
 ! ASSUMING RED OPACITY IS HIGHER     
 DO I=1,ND
      IF(I.LT.ND.AND.ITAUC1.EQ.0) THEN
-        IF(OPACON(INDEX1(I+1),1).NE.OPAC(I+1,K0)*SR) &
-          STOP' ERROR IN OPACON/OPAC -- subr. CONTIN'
+        IF(OPACON(INDEX1(I+1),1).NE.OPAC(I+1,KLOW)*SR) &
+          STOP ' ERROR IN OPACON/OPAC -- subr. CONTIN'
         TAUCON=TAUCON+ &
-&       .5*(OPACON(INDEX1(I),1)+OPAC(I+1,K0)*SR)* &
+&       .5*(OPACON(INDEX1(I),1)+OPAC(I+1,KLOW)*SR)* &
 &       (R(INDEX1(I))-R(INDEX1(I+1)))
         IF(TAUCON.GE.0.66) ITAUC1=I
      ENDIF
@@ -1156,7 +1220,7 @@ ENDDO
 CLOSE (1)  
 CLOSE (11)  
 !
-IF(ITAUC1.EQ.0) STOP' TAUC = 0.66 NOT FOUND'
+IF(ITAUC1.EQ.0) STOP ' TAUC = 0.66 NOT FOUND'
 PRINT* 
 PRINT*,' TAUCON = ',TAUCON,' AT LOG NE = ',LOG10(XNE(ITAUC1))
 !
@@ -1237,14 +1301,14 @@ JLOOP: DO J = J1 + 1,J2 - 1
                XNU = EXP(OL)  
                OPAL(J,K)  = C1*GFLU(K)* (XNL/GL(K)-XNU/GU(K))*SR * EFF_RAT_INT
 ! Now effective 
-               IF(OPAL(J,K).EQ.0.) STOP' OPAL = 0 IN INTERPOLATION; CHANGE SCHEME'
+               IF(OPAL(J,K).EQ.0.) STOP ' OPAL = 0 IN INTERPOLATION; CHANGE SCHEME'
                SLINE(J,K) = C2* (XNUE(K)**3)/(XNL/XNU*GU(K)/GL(K)-1.D0)
 ! IN CASE (IF ABS HAS BEEN USED ABOVE
 !               OPAL(J,K)  = ABS(C1*GFLU(K)* (XNL/GL(K)-XNU/GU(K))*SR)  
 !               SLINE(J,K) = ABS(C2* (XNUE(K)**3)/(XNL/XNU*GU(K)/GL(K)-1.D0))
                IF (SLINE(J,K)*OPAL(J,K).LT.0.) THEN
                  PRINT*,R(J),' ',J,' ',K,' OPAL*SL < 0!'
-                 STOP' OPAL*SL < 0!'
+                 STOP ' OPAL*SL < 0!'
                ENDIF  
           END DO
 !          WRITE(*,1001) J1,J2,J,OPAL(J1,1),OPAL(J,1),OPAL(J2,1)
@@ -1339,7 +1403,7 @@ LOGICAL FLAG
 REAL(DP) ::  PERFIL1  
 !     ..
 
-IF(VTURB.NE.VTURBMIN) STOP' VTURB NE VTURBMIN in CALCXMAX'
+IF(VTURB.NE.VTURBMIN) STOP ' VTURB NE VTURBMIN in CALCXMAX'
 
 ! minimum for xmax according to dlam = 10. A or 0.3 vinf 
 !
@@ -1432,9 +1496,9 @@ END
 !
 !-----------------------------------------------------------------------
 !
-SUBROUTINE MODEL(R,RPRIM,V,VPRIM,DVDR,RHOPRI,RMAX,ND1,ND2,VMAX,VDOP,INDEX1, &
-                 SRVMAX,SR,NB,XNE,CLF,CLF_TEST,VTMI,VTMA)
-!!
+SUBROUTINE MODEL(R,RPRIM,VPRIM,RHOPRI,RMAX,ND1,ND2,VMAX,VDOP, &
+&                INDEX1,SRVMAX,SR,NB,XNE,CLF,CLF_TEST,VTMI,VTMA)
+!
 ! enhancement factor clf now read from 'model'
 ! NOTE: ne, nh and occupation numbers include clf, rho NOT
 USE nlte_type
@@ -1462,23 +1526,23 @@ INTEGER(I4B), PARAMETER :: KEL=ID_ATOMS,KIS=ID_KISAT
 REAL(DP), PARAMETER :: RSUN=6.96D10  
 !     ..
 !     .. scalar arguments ..
-REAL(DP) ::  RMAX,SR,SRVMAX,VMAX,VTMI,VTMA  
+REAL(DP) ::  RMAX,SR,SRVMAX,VMAX ,VTMI,VTMA 
 INTEGER(I4B) ::  NB,ND1,ND2  
 !     ..
 !     .. array arguments ..
 REAL(DP) ::  R(ND),RHOPRI(NDM),RPRIM(NDM),VDOP(NB),VPRIM(NDM), &
-&                 XNE(ND),CLF(ND),V(ND),DVDR(ND)
+&                 XNE(ND),CLF(ND)
 REAL(DP), DIMENSION(ND) :: CLF_TEST(ND)
 
 INTEGER(I4B) ::  INDEX1(ND)  
 !     ..
 !     .. local scalars ..
-REAL(DP) ::  A,AUX,BETA,CTECEQ,DEL,DVMIN,DVRHO,GGRAV, &
-&                 VMIN,VVDOP,VD,X,XMLOSS,XMU,YHE,DUM1,TEFF
+REAL(DP) ::  A,AUX,BETA,CTECEQ,DEL,DVMIN,DVRHO,GGRAV,TEFF, &
+&                 VMIN,VVDOP,VD,X,XMLOSS,XMU,YHE
 INTEGER(I4B) ::  I,J,K,NN,NRHO,NV  
 !     ..
 !     .. local arrays ..
-REAL(DP) ::  ENIONND(KEL,KIS+1,ND),RHO(ND),XNH(ND)
+REAL(DP) ::  DVDR(ND),ENIONND(KEL,KIS+1,ND),RHO(ND),V(ND),XNH(ND)
 
 !     ..
 !     .. intrinsic functions ..
@@ -1499,15 +1563,15 @@ CLOSE (1)
 !test consistency
 DO I=1,ND 
 ! lower precision in CLUMPING_OUTPUT   
-   IF (ABS(CLF_TEST(I)-CLF(I)).GT.1.D-3) STOP' Error in in clumping params!, model_1' 
+   IF (ABS(CLF_TEST(I)-CLF(I)).GT.1.D-3) STOP ' Error in in clumping params!, model_1' 
 ENDDO
 
 RMAX = R(1)  
 !
-!---- calculation of doppler width(s) using VTURBMIN
+!---- calculation of doppler width(s) using VTURBMIN 
 !
 VTURBMIN=VTMI*1.D5 
-IF (VTURBMIN.NE.VTURB) STOP' SOMETHING WRONG WITH VTURB -- SUBR. MODEL'
+IF (VTURBMIN.NE.VTURB) STOP ' SOMETHING WRONG WITH VTURB -- SUBR. MODEL'
 IF (VTMA.LE.1.D0) THEN
   VTURBMAX=VTMA*VMAX
 ELSE 
@@ -1628,7 +1692,7 @@ CHARACTER*60 :: FILE
 OPEN (1,FILE=TRIM(FILE)//'/STARK.BIN',STATUS='OLD',FORM='UNFORMATTED')  
 REWIND 1  
 
-IF (NSUM.EQ.0. .OR. NSUM.GT.NB) STOP' STAREAD CALLED ERRONEOUSLY'  
+IF (NSUM.EQ.0. .OR. NSUM.GT.NB) STOP ' STAREAD CALLED ERRONEOUSLY'  
 
 DO I = 1,NB  
 
@@ -1792,10 +1856,13 @@ CLOSE (1)
 DO I=1,IFRETOT
   IF(FREQC(I).EQ.0.) EXIT
 ENDDO  
+! here might be a bug. Sometimes, the frequency files are longer than
+! NFRE (because of previous iterations with more freq. points. Valid
+! data are only until nfre. Nevertheless, ifre only used here
 IFRE=I
 
 IF(.NOT.OPTTHICK.AND.MAXVAL(ABS(OPA_EFF_RAT(1:ND,1:IFRE)-1.D0)).GT.1.D-6) &
-  STOP' OPTICALLY THIN CLUMPING AND OPA_EFF_RAT NE 1, subr. elscat!!!'
+  STOP ' OPTICALLY THIN CLUMPING AND OPA_EFF_RAT NE 1, subr. elscat!!!'
 
 
 OPEN (1,FILE=TRIM(FILE)//'/NLTE_POP',STATUS='OLD',ACCESS='DIRECT',RECL=NRECET)
@@ -1856,12 +1923,12 @@ DO I = 1,ND
 ! re-correct for OPA_EFF_RAT
      THOMSON_1=(XNE(I)*SIGMAE*XMH/CLF(I))/OPACON(I,K0)*OPA_EFF_RAT(I,K0)
      THOMSON_2=THOMS(I,K0)-THOMSON_1
-     IF(THOMSON_2.LT.-1.d-14) STOP' ERROR IN THOMSON_1(K0)'
+     IF(THOMSON_2.LT.-1.d-14) STOP ' ERROR IN THOMSON_1(K0)'
      THOMSON_2=AMAX1(0.,THOMSON_2)
 
      THOMSON_11=(XNE(I)*SIGMAE*XMH/CLF(I))/OPACON(I,K01)*OPA_EFF_RAT(I,K01)
      THOMSON_21=THOMS(I,K01)-THOMSON_11             
-     IF(THOMSON_21.LT.-1.d-14) STOP' ERROR IN THOMSON_11(K1)'
+     IF(THOMSON_21.LT.-1.d-14) STOP ' ERROR IN THOMSON_11(K1)'
      THOMSON_21=AMAX1(0.,THOMSON_21)
 
      OPAC(I) = (QRED*OPACON(I,K0)+QBLUE*OPACON(I,K01)) ! already corrected 
@@ -1902,7 +1969,7 @@ DO I = 1,ND
           IF (FAC2.LE.0.0D0.OR.FAC2.GT.1.0D0) THEN 
             PRINT*,FAC2
             PRINT*,TCL,I,IK
-            STOP' OPA_EFF > <OPA>, ELSCAT'
+            STOP ' OPA_EFF > <OPA>, ELSCAT'
           ENDIF
           OPAL(I,IK) = XKL*SRVMAX*XLAMB(IK)*FAC2  
           SLINE(I,IK) = C2* (XNUE(IK)**3)/ (XNL/XNU*GU(IK)/GL(IK)- 1.D0)
@@ -2033,7 +2100,7 @@ DO IK=1,NB
    DO I=1,ILAST
      IF(ABS(XX(I)-XC(IK)).LT.1.D-15) GOTO 100
    ENDDO
-   STOP' XC(IK) NOT FOUND IN XX!'
+   STOP ' XC(IK) NOT FOUND IN XX!'
 100 CONTINUE   
 ENDDO
 
@@ -2053,7 +2120,7 @@ DO I=1,ILAST-1
 ENDDO
 ILAST=INEXT-1
 
-IF(ILAST.GT.NFMAX) STOP'NFMAX=ID_NFESC TOO SMALL'
+IF(ILAST.GT.NFMAX) STOP 'NFMAX=ID_NFESC TOO SMALL'
 
 NFCMF=ILAST
 
@@ -2112,7 +2179,7 @@ PRINT *
 PRINT *,' MAX. INCONSISTENCY IN JNUE(CONT): ',ERR  
 PRINT *  
 
-IF(ERR.GT.0.01) STOP'INCONSISTENCY IN JNUE(CONT) TOO LARGE!'
+IF(ERR.GT.0.01) STOP 'INCONSISTENCY IN JNUE(CONT) TOO LARGE!'
 
 !for tests of stark-broadening
 !PRINT*,'lambda, 20000/1D13 40000/1D14 20000/1D14 40000/1D14'
@@ -3414,7 +3481,7 @@ SUBROUTINE FORMAL(ND,NP,NC,NB,NFOBS,RMAX,DELTA,ESCAT,R1,R,V,OPAL, &
 USE nlte_type
 USE nlte_dim
 USE fund_const, ONLY: CLIGHT,PI
-USE formalsol_var, ONLY: XNEMIN,INVERTED,FILE
+USE formalsol_var, ONLY: XNEMIN,INVERTED,FILE,KLOW,KUP,FCONTLOW,FCONTUP
 IMPLICIT NONE
 !
 !
@@ -3440,15 +3507,12 @@ REAL(DP) ::  AIC(NF,2),OPACON(NDM,2),OPACRAY(LTO1,2), &
 &                 VDOP(NB),X0(NF),XCMF(LTO1,NB), &
 &                 XMAX(NB),XMAXDOP(NB),XMAXDOP_MIN(NB), &
 &                 XNE(NDM),Z(NDM,NP1),ZG(NP1,NF),ZRAY(LTO1),DELTAARR(NB)
-INTEGER(I4B) ::  LMAX(NP1),LTOT(NP1),INVER(ND1)
-!NEW-JS APR 2018: PRINTING INTENSITIES AS WELL, SEE BELOW
-REAL(DP) :: IEMER_ABS(NFOBS,NP), IEMER_EM(NFOBS,NP), FLUX_WEIGHTS(NFOBS,NP), &
-&                FLUX_WEIGHTS1(NFOBS,NP) !,PRAY(JP) 
+INTEGER(I4B) ::  LMAX(NP1),LTOT(NP1),INVER(ND1)  
 !     ..
 !     .. local scalars ..
 REAL(DP) ::  AEQUIT,DD,DELP,EMINT,EMINT1,ERRMAX, &
 &                 RELEM,TAUC,TAUK,VPLUS,VVDOP,W,W1,WW,WW1,XCMFMIN,XICOR, &
-&                 XKW,XN,XXLAM,XXLAM1,XXX0,Z2
+&                 XKW,XN,XXLAM,XXLAM1,XXX0,Z2,DIFF,DIFFCONT
 INTEGER(I4B) ::  I,IJP,IK, &
 &        IREST,ISTART,IZB,IZB1,IZNEB,IZNER,IZR,IZR2,J,JJ,JP,K,L, &
 &        LEMIN,LM,LM1,LTAUMAX,NDELT,III
@@ -3470,6 +3534,9 @@ INTRINSIC ABS,DBLE,EXP,LOG10,MAX,MIN,SQRT
 
 IF (ND.GT.NDM) STOP ' ND > NDM IN FORMAL'  
 IF (NF.NE.NFOBS) STOP ' NF .NE. NFOBS IN FORMAL'  
+
+! no continuum definition possible, no profile will be calculated
+IF(KLOW.EQ.-1 .AND. KUP.EQ.-1) GOTO 100
 
 VVDOP = 1.D50  
 
@@ -3576,12 +3643,6 @@ XNEMIN=3.2D10
 
 110 CONTINUE
 
-!JS-NEW APR 2018: Intensiyt output, see below
-IEMER_ABS = 0.0D0 
-IEMER_EM = 0.0D0
-FLUX_WEIGHTS = 0.0D0
-FLUX_WEIGHTS1 = 0.0D0
-!
 JPLOOP: DO JP = 1,NP - 1  
 !JPLOOP: DO JP = 1,1  
      LM = LMAX(JP)  
@@ -3589,7 +3650,7 @@ JPLOOP: DO JP = 1,NP - 1
      FIRST = .TRUE.  
 
      KLOOP: DO K = 1,NFOBS  
-!     KLOOP: DO K = 1,1  
+!     KLOOP: DO K = 81,81  
 !     KLOOP: DO K = 34,34  
 
           XICOR = AIC(K,1) + Z(LM,JP)*AIC(K,2)  
@@ -3600,8 +3661,6 @@ JPLOOP: DO JP = 1,NP - 1
            XMAXDOP,IZR,IZR2,IZB1,IZB,IZNER,IZNEB, FIRST,OPTIOV, &
            NSUM,SCONT,SCONRAY,OPACON, OPACRAY,TEMP,TEMPRAY,XNE, &
            XNERAY,ESCAT,DELTAARR)
-          !JS-NEW APR 2018
-          !PRAY(JP) = P 
 !
 !           correction to achim's integration weights is necessary to
 !           obtain absolute fluxes
@@ -3718,16 +3777,6 @@ JPLOOP: DO JP = 1,NP - 1
 !
 !           write(20,*) zg(jp,k)
 !
-
-          !JS-NEW APR 2018: Adding variables for printing intensities
-          !as functions of frequency and p-ray, for Michael's project
-          !using surface intensity maps.
-          IEMER_ABS(K,JP) = EMINT1 
-          IEMER_EM(K,JP) = EMINT
-          FLUX_WEIGHTS(K,JP) = WW 
-          FLUX_WEIGHTS1(K,JP) = WW1 
-          !----------------------------------
-
           S1PABS(K) = S1PABS(K) + WW*EMINT1  
           S1PEM(K) = S1PEM(K) + WW*EMINT  
           IF (CORE) CONABS(K) = CONABS(K) + WW*XICOR*EXP(-TAUCON(LM1))
@@ -3738,11 +3787,11 @@ JPLOOP: DO JP = 1,NP - 1
                CONEM2(K) = CONEM2(K) + WW1*FSCON(1)  
           END IF  
 
-!          print*,S1PEM(K),WW,IEMER_ABS(K,JP)  
      END DO KLOOP
 
 END DO JPLOOP  
 
+DIFFCONT=0.
 DO K = 1,NFOBS  
 
      PROFABS(K) = S1PABS(K)  
@@ -3757,46 +3806,82 @@ DO K = 1,NFOBS
      ERRMAX = MAX(ERRMAX,RELEM)  
      PROFILE(K) = PROFABS(K) + PROFEM(K)  
      PROFCON(K) = CONEM1(K) + CONEM2(K) + CONABS(K)  
+! COMPARE CONTINUUM FLUXES FROM HERE AND FROM FLUXCONT
+     DIFF=MAX(ABS(LOG10(PROFCON(K))-FCONTLOW), &
+&              ABS(LOG10(PROFCON(K))-FCONTUP))
+     IF(DIFF.GT.0.2) THEN
+       PRINT*,LOG10(PROFCON(K)),FCONTLOW,FCONTUP
+       PRINT*,' CONTINUUM FLUXES (OUTPUT VS. FLUXCONT) STRONGLY DIFFERENT'
+       KLOW=-1
+       KUP=-1
+       GOTO 100
+     ENDIF
+       
+     DIFF=MAX(ABS(1.-PROFCON(K)/10.**FCONTLOW), &
+&              ABS(1.-PROFCON(K)/10.**FCONTUP))
+     DIFFCONT=MAX(DIFF,DIFFCONT)
      PROFRED(K) = PROFILE(K)/PROFCON(1)  
 !
-!     now: profile contains wavelengths
+!     NOW: PROFILE CONTAINS WAVELENGTHS
 !
      PROFILE(K) = 1.D8/XNUE0/ (X0(K)*VMAX/CLIGHT+1.D0)  
 END DO  
+
+PRINT*
+PRINT*,' CALCULATED CONTINUUM FLUX (LOG) = ',LOG10(PROFCON(1))
+IF (LOG10(PROFCON(1)).GE.AMIN1(FCONTLOW,FCONTUP) .AND. &
+    LOG10(PROFCON(1)).LE.AMAX1(FCONTLOW,FCONTUP)) THEN
+ PRINT*,' CONT. FLUXES CONSISTENT WITH FLUXCONT (SEE ABOVE)'
+ELSE          
+ PRINT*,' MAXIMUM DEVIATION OF CONT. FLUXES (W.R.T. FLUXCONT BOUNDARIES) = ', &
+          DIFFCONT
+ENDIF
+PRINT*
 !
 !     rot. convolution
 !
-!TEST JS ! - works fine, doesn't change anything 
 CALL RCONV(PROFILE,PROFRED,PROFROT,NFOBS,VSINI)  
-!PROFROT = PROFRED 
 !
 !     conversion to wavelength in air, xkw is wavenumber in microns,
 !     formula a la lang, is done in preformal/hallcl
 !
+100 CONTINUE
+
+IF(KLOW.EQ.-1 .AND. KUP.EQ.-1) THEN
+! error condition 
+! 
+! pseudo frequency grid
+  DIFF=2.D0/FLOAT(NFOBS-1)
+
+  DO K = 1,NFOBS  
+     X0(K)=1.-DIFF*(K-1)
+     PROFILE(K) = 1.D8/XNUE0/ (X0(K)*VMAX/CLIGHT+1.D0)
+     XXLAM = PROFILE(K)  
+     PROFCON(K)=0.D0
+     PROFRED(K)=0.D0
+     PROFROT(K)=0.D0
+     
+     WRITE (*,FMT=9000) K,X0(K),XXLAM,PROFCON(K),PROFRED(K),PROFROT(K)
+     WRITE (2,FMT=9000) K,X0(K),XXLAM,PROFCON(K),PROFRED(K),PROFROT(K)
+  END DO
+  PRINT *  
+  PRINT *,' CONTINUUM AROUND LINE(S) PROBLEMATIC (see output above)'
+  PRINT *,' NO PROFILE CALCULATED (set to zero)'
+  PRINT *  
+  AEQUIT=0.D0
+  WRITE (2,FMT=*) AEQUIT  
+ELSE
 DO K = 1,NFOBS  
-   XXLAM = PROFILE(K)  
+     XXLAM = PROFILE(K)  
 
-   IF (K.NE.1) THEN  
-      XXLAM1 = PROFILE(K-1)  
-      AEQUIT = AEQUIT+(.5D0*(PROFROT(K-1)+PROFROT(K))-1.D0)*(XXLAM-XXLAM1)
-   END IF
-   
-   WRITE (*,FMT=9000) K,X0(K),XXLAM,PROFCON(K),PROFRED(K),PROFROT(K)
-   WRITE (2,FMT=9000) K,X0(K),XXLAM,PROFCON(K),PROFRED(K),PROFROT(K)
-END DO
+     IF (K.NE.1) THEN  
+          XXLAM1 = PROFILE(K-1)  
+          AEQUIT = AEQUIT+(.5D0*(PROFROT(K-1)+PROFROT(K))-1.D0)*(XXLAM-XXLAM1)
+     END IF  
 
-!JS-NEW APR 2018: ADDING OUTPUT FOR INTENSITES, SEE ABOVE
-DO K = 1,NFOBS
-   XXLAM = PROFILE(K)  
-   DO JP = 1,NP
-      !JS-NEW: Something weird with format here !  hack for now...
-      IF (IEMER_ABS(K,JP).LT.1.D-15) IEMER_ABS(K,JP)=0.0D0
-      IF (IEMER_EM(K,JP).LT.1.D-15) IEMER_EM(K,JP)=0.0D0
-      WRITE (22,FMT=10000) JP,P(JP),K,XXLAM,IEMER_ABS(K,JP),IEMER_EM(K,JP),FLUX_WEIGHTS(K,JP),FLUX_WEIGHTS1(K,JP)!,PROFCON(K) 
-   ENDDO
-ENDDO
-10000 FORMAT (1X,I3,F14.6,1X,I3,F14.6,4(2X,G17.6))  
-!------------------------------
+     WRITE (*,FMT=9000) K,X0(K),XXLAM,PROFCON(K),PROFRED(K),PROFROT(K)
+     WRITE (2,FMT=9000) K,X0(K),XXLAM,PROFCON(K),PROFRED(K),PROFROT(K)
+END DO  
 !
 !#    pessimistic error (from delta i/i with step halfing)
 !
@@ -3842,6 +3927,9 @@ DO IK=1,NB
 ENDDO
 PRINT*
 
+ENDIF
+
+
 RETURN  
 
  9000 FORMAT (1X,I3,5 (2X,G14.6))  
@@ -3858,7 +3946,7 @@ SUBROUTINE FORMACON(TAUCON,LTAUMAX,FSCON,OPACRAY,SCONRAY,ZRAY, &
 !
 USE nlte_type
 USE nlte_dim
-USE formalsol_var, ONLY: XCMFP,VZRP,WP,WP1  
+USE formalsol_var, ONLY: XCMFP,VZRP,WP,WP1,LAMTRANS,UVLIMIT  
 IMPLICIT NONE
 !
 !---- calculates comoving continuum opacity and source function over
@@ -3903,22 +3991,50 @@ IF (ESCAT) THEN
 !
 !    changed as elscat assumes constant opacities
 !
+          IF(DXC.EQ.0.D0) STOP ' DXC = 0 FOR ESCAT CONDITION'
           DX00 = (0.D0+XCMFP(I)-XCRED)/DXC  
           OPAC(I) = OPACRAY(I,1) + (OPACRAY(I,2)-OPACRAY(I,1))*DX00
           SCO(I) = SCONRAY(I,1)  
      END DO 
 
 ELSE  
+     IF(X0.NE.0.D0) THEN
+       PRINT*,' X0 NE 0 IN FORMACON'
+       PRINT*,' NOT POSSIBLE WITH CURRENT SETUP (ONLY ONE FREQ. POINT FOR CONT.)' 
+       STOP ' X0 NE 0 IN FORMACON'
+     ENDIF
+     
      DO I = 1,LTOTAL  
 !
 !    changed as elscat assumes constant opacities
 !
-          DX00 = (0.D0+XCMFP(I)-XCRED)/DXC  
-          DX0 = (X0+XCMFP(I)-XCRED)/DXC  
-!    if strongly varying cont. opacities, the next statement needs to
+          IF(DXC.EQ.0.D0) THEN
+! no interpolation
+          IF(OPACRAY(I,1).NE.OPACRAY(I,2)) STOP ' INCONSISTENCY DXC=0 AND OPACRAY'
+          IF(SCONRAY(I,1).NE.SCONRAY(I,2)) STOP ' INCONSISTENCY DXC=0 AND SCONRAY'
+          OPAC(I) = OPACRAY(I,1)
+          SCO(I) = SCONRAY(I,1)  
+          ELSE          
+! to avoid cmf-interpolation between (sometimes) strongly varying opacities/
+! source-functions in the UV, we interpolate here only in the observer's frame;
+! note that the freq. shift for the bg-elements is performed only in an
+! approximate way, so that the major part of the pseudo-cont. is in the
+! observer's frame anyway. For consistency with older versions, we keep
+! the old cmf-interpolation for optical/IR lines
+          IF(LAMTRANS.GE.UVLIMIT) THEN  
+            DX00 = (0.D0+XCMFP(I)-XCRED)/DXC  
+            DX0 = (X0+XCMFP(I)-XCRED)/DXC  
+          ELSE
+            DX00 = (0.D0-XCRED)/DXC  
+            DX0 = (X0-XCRED)/DXC
+          ENDIF
+!    OLDER COMMENT: if strongly varying cont. opacities, the next statement needs to
 !    be changed (OPAC with DX0 as well)
+!    NOW (Nov. 2021): cured via new approach to find suitable cont. points,
+!    and to interpolate, in the UV, only w.r.t. the observer's frame 
           OPAC(I) = OPACRAY(I,1) + (OPACRAY(I,2)-OPACRAY(I,1))*DX00
-          SCO(I) = SCONRAY(I,1) + (SCONRAY(I,2)-SCONRAY(I,1))*DX0  
+          SCO(I) = SCONRAY(I,1) + (SCONRAY(I,2)-SCONRAY(I,1))*DX0
+          ENDIF   
      END DO 
 
 END IF  
@@ -4553,7 +4669,7 @@ EXTERNAL EXPUNO,PERFIL1
 INTRINSIC EXP  
 !     ..
 
-IF(NB.GT.2) STOP' NB > 2 AND OBSFRAM2!'
+IF(NB.GT.2) STOP ' NB > 2 AND OBSFRAM2!'
 
 OPTOUT = .TRUE.  
 
@@ -4820,8 +4936,8 @@ IF (FIRST) THEN
      VDOPMAX = VDOPMIN*2.D0  
 ! modified from V6.0 on
      IF (NB.GE.2) THEN
-       IF(XNUE(1)/XNUE(NB).LE.1.D0) STOP' PREFORMAL: ERROR IN XNUE'
-       IF(NB.GT.10) STOP' TOO MANY COMPONENTS (> 10) IN PREFORMAL'
+       IF(XNUE(1)/XNUE(NB).LE.1.D0) STOP ' PREFORMAL: ERROR IN XNUE'
+       IF(NB.GT.10) STOP ' TOO MANY COMPONENTS (> 10) IN PREFORMAL'
        DO I=2,NB 
          X01(I) = (X0 + DELTAARR(I))*XNUE(1)/XNUE(I)  
        ENDDO
@@ -5487,9 +5603,9 @@ EXTERNAL SORT
 INTRINSIC ABS,DBLE,EXP,LOG10,MAX  
 !     ..
 !
-IF(NF.NE.NFOBS) STOP' NF NE NFOBS IN XGRID'
+IF(NF.NE.NFOBS) STOP ' NF NE NFOBS IN XGRID'
 
-IF(NB.EQ.1 .AND. DELTA .NE. 0.D0) STOP' NB=1 AND DELTA NE 0' 
+IF(NB.EQ.1 .AND. DELTA .NE. 0.D0) STOP ' NB=1 AND DELTA NE 0' 
 
 !C2 = 1.439426D0/TEM
 !changed by JO July 2015
@@ -5586,7 +5702,7 @@ IF(FMAX.EQ.FMAX1) THEN ! either no elscat, or elscat wings narrow
    M=M1
 
 ELSE
-   IF(.NOT.ESCAT) STOP' ERROR IN ESCAT PHILOSOPHY - SUBR. XGRID'
+   IF(.NOT.ESCAT) STOP ' ERROR IN ESCAT PHILOSOPHY - SUBR. XGRID'
 ! equidistant grid with M1-20 points
    M1=M1-20
    XX = (FMAX+FMIN)/DBLE(M1-1)  
@@ -5721,9 +5837,9 @@ EXTERNAL SORT
 INTRINSIC ABS,DBLE,EXP,LOG10,MAX  
 !     ..
 !
-IF(NF.NE.NFOBS) STOP' NF NE NFOBS IN XGRID'
+IF(NF.NE.NFOBS) STOP ' NF NE NFOBS IN XGRID'
 
-IF(NB.EQ.1 .AND. DELTA .NE. 0.D0) STOP' NB=1 AND DELTA NE 0' 
+IF(NB.EQ.1 .AND. DELTA .NE. 0.D0) STOP ' NB=1 AND DELTA NE 0' 
 
 !changed by JO July 2015
 C2=1.4388354967334D0/TEM
@@ -5841,7 +5957,7 @@ IF (.NOT.ESCAT .OR. FMAX.GE.XCMFE(1)) THEN
 !-----
           ELSE
 !TWO COMPONENTS
-          IF (NB.NE.2) STOP' SOMETHING WRONG WITH NB(1)'
+          IF (NB.NE.2) STOP ' SOMETHING WRONG WITH NB(1)'
           MFIRST=M/2
           XX = (FXLOG+4.D0)/DBLE(MFIRST-1)  
           DO I = 1,MFIRST  
@@ -5869,7 +5985,7 @@ IF (.NOT.ESCAT .OR. FMAX.GE.XCMFE(1)) THEN
                X0(K) = -1.D1** (-4.D0+DBLE(I-1)*YY) - DELTA  
           END DO
 
-          IF (MRED+K .NE. NFOBS-1) STOP' SOMETHING WRONG IN MRED PHILOSOPHY' 
+          IF (MRED+K .NE. NFOBS-1) STOP ' SOMETHING WRONG IN MRED PHILOSOPHY' 
           MRED=MRED+1
 
           XX = (FMIN-.5D0)/DBLE(MRED)  
@@ -5924,7 +6040,7 @@ IF (.NOT.ESCAT .OR. FMAX.GE.XCMFE(1)) THEN
 !
           ELSE
 !TWO COMPONENTS
-          IF (NB.NE.2) STOP' SOMETHING WRONG WITH NB(2)'
+          IF (NB.NE.2) STOP ' SOMETHING WRONG WITH NB(2)'
           MFIRST=M/2
           XX = (FXLOG+4.D0)/DBLE(MFIRST-1)  
           K = 0  
@@ -5953,7 +6069,7 @@ IF (.NOT.ESCAT .OR. FMAX.GE.XCMFE(1)) THEN
                X0(K) = -1.D1** (-4.D0+DBLE(I-1)*YY) - DELTA  
           END DO
 
-          IF(K+MBLUE+MRED .NE. NFOBS-1) STOP' SOMETHING WRONG IN MBLUE/MRED PHILOSOPHY' 
+          IF(K+MBLUE+MRED .NE. NFOBS-1) STOP ' SOMETHING WRONG IN MBLUE/MRED PHILOSOPHY' 
           MRED=MRED+1
 
           ENDIF ! ONE OR TWO COMPONENT TREATMENT
@@ -7317,3 +7433,143 @@ XNU=CONST*GL(NU)*EXP(HK*FL(NU)/TEMP)
 
 RETURN
 END
+!
+!-----------------------------------------------------------------------
+!
+SUBROUTINE median(x2, n, xmed)
+
+! Find the median of X2(1), ... , X2(N), using as much of the quicksort
+! algorithm as is needed to isolate it.
+
+!     Latest revision - 26 November 1996
+!	  From A. Miller repository
+!	  Modified to take real type from module share, C. Allende Prieto 2011
+!	  Changed input array from x to x2, so that it is not changed, CAP 2017 
+
+USE nlte_type
+
+IMPLICIT NONE
+
+INTEGER(I4B), INTENT(IN)               :: n
+REAL(DP), INTENT(IN), DIMENSION(n)     :: x2
+REAL(DP), INTENT(OUT)                  :: xmed
+
+! Local variables
+REAL(DP), DIMENSION(n)  :: x
+REAL(DP):: temp, xhi, xlo, xmax, xmin
+LOGICAL :: odd
+INTEGER(I4B) :: hi, lo, nby2, nby2p1, mid, i, j, k
+
+!make a copy to avoid altering it
+x=x2
+
+nby2 = n / 2
+nby2p1 = nby2 + 1
+odd = .true.
+
+
+!     HI & LO are position limits encompassing the median.
+
+IF (n == 2 * nby2) odd = .false.
+lo = 1
+hi = n
+IF (n < 3) THEN
+  IF (n < 1) THEN
+    xmed = 0.0
+    RETURN
+  END IF
+  xmed = x(1)
+  IF (n == 1) RETURN
+  xmed = 0.5*(xmed + x(2))
+  RETURN
+END IF
+
+!     Find median of 1st, middle & last values.
+
+10 mid = (lo + hi)/2
+xmed = x(mid)
+xlo = x(lo)
+xhi = x(hi)
+IF (xhi < xlo) THEN          ! Swap xhi & xlo
+  temp = xhi
+  xhi = xlo
+  xlo = temp
+END IF
+IF (xmed > xhi) THEN
+  xmed = xhi
+ELSE IF (xmed < xlo) THEN
+  xmed = xlo
+END IF
+
+! The basic quicksort algorithm to move all values <= the sort key (XMED)
+! to the left-hand end, and all higher values to the other end.
+
+i = lo
+j = hi
+50 DO
+  IF (x(i) >= xmed) EXIT
+  i = i + 1
+END DO
+DO
+  IF (x(j) <= xmed) EXIT
+  j = j - 1
+END DO
+IF (i < j) THEN
+  temp = x(i)
+  x(i) = x(j)
+  x(j) = temp
+  i = i + 1
+  j = j - 1
+
+!     Decide which half the median is in.
+
+  IF (i <= j) GO TO 50
+END IF
+
+IF (.NOT. odd) THEN
+  IF (j == nby2 .AND. i == nby2p1) GO TO 130
+  IF (j < nby2) lo = i
+  IF (i > nby2p1) hi = j
+  IF (i /= j) GO TO 100
+  IF (i == nby2) lo = nby2
+  IF (j == nby2p1) hi = nby2p1
+ELSE
+  IF (j < nby2p1) lo = i
+  IF (i > nby2p1) hi = j
+  IF (i /= j) GO TO 100
+
+! Test whether median has been isolated.
+
+  IF (i == nby2p1) RETURN
+END IF
+100 IF (lo < hi - 1) GO TO 10
+
+IF (.NOT. odd) THEN
+  xmed = 0.5*(x(nby2) + x(nby2p1))
+  RETURN
+END IF
+temp = x(lo)
+IF (temp > x(hi)) THEN
+  x(lo) = x(hi)
+  x(hi) = temp
+END IF
+xmed = x(nby2p1)
+RETURN
+
+! Special case, N even, J = N/2 & I = J + 1, so the median is
+! between the two halves of the series.   Find max. of the first
+! half & min. of the second half, then average.
+
+130 xmax = x(1)
+DO k = lo, j
+  xmax = MAX(xmax, x(k))
+END DO
+xmin = x(n)
+DO k = i, hi
+  xmin = MIN(xmin, x(k))
+END DO
+xmed = 0.5*(xmin + xmax)
+
+RETURN
+END SUBROUTINE median
+

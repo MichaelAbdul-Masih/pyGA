@@ -1,0 +1,50 @@
+Please, add here any note of interest about changes in the programs
+
+=========================================================================
+
+- Added small modification in nlte.f90 about the change in logQ when 
+  defining the Hopf parameters:
+
+   QQQ=-14.
+
+   !IF (TIN.EQ.TEFF .AND. GIN.EQ.GGRAV .AND. YIN.EQ.YHE .AND. QQIN.EQ.QQQ) THEN
+
+   changed to 
+
+   !QQQ=-14.
+
+   IF (TIN.EQ.TEFF .AND. GIN.EQ.GGRAV .AND. YIN.EQ.YHE .AND. &
+   & abs(QQIN-QQQ).lt.1.d-1) THEN
+
+=========================================================================
+
+- to load ifort (in bash)
+
+  module purge
+  module load compiler/latest
+
+=========================================================================
+
+Added things (not in standard release)
+
+- directory code
+
+  A10_FOLDER
+  CHAINFIL_FOLDER  (+CHAINFIL_test_HHe + CHAINFIL_test_HHeSi + CHAINFIL_test_HHeCNO)
+  FORMAL_INPUT_FOLDER (see notes above)
+  runnlte21
+  z_limpia.me
+  
+  chain.f90
+  chain_nohopf.f90
+  chain_hopf.f90
+  
+  cp chain_hopf.f90 chain.f90
+  cp Makefile       Makefile_ifort
+
+- directory  FORMAL_INPUT_FOLDER/ 
+
+  Updated file FORMAL_INPUT_A10HHe.ss21 with some extra H, HeI and HeII lines
+  Updated file FORMAL_INPUT_A10HHeSi.ss21 with some extra extra H, HeI-II and SiII-IV lines
+  Uploaded file FORMAL_INPUT_HHe_ncastro_V130922 with a lot of new additions by different people
+

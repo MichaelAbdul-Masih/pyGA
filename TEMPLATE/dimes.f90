@@ -1,3 +1,18 @@
+! version 1.7.1
+! (Sept 2021) - number of freq. points changed (rounded + 500)
+!               [including add. freq. for Stark-broadened transitions]
+!
+! version 1.7 (Oct 2020)
+! compatible with gfortran
+!
+! version 1.6 (March 2017)
+! one more freq. point at 303.797 (HeII Ly-alpha)
+!
+! version 1.5 (Jan 2015)
+! frequency grid changed between 1600 and 911, consistent with nlte.f90
+! checked July 2016 that v. 1.3.4  from Feb 2015 was already correctly included:
+! FRESCAL_0 CHANGED FOR BETTER RESOLUTION 
+!
 ! version 1.4 
 ! allows for X-ray treatment (FRESCAL0 adapted for higher frequencies and K-shells
 !
@@ -15,6 +30,7 @@
 ! new default values for nd1 and np1
 
 ! version 1.3 until March 2013
+
 MODULE nlte_param
 !
 USE nlte_type
@@ -28,17 +44,18 @@ INTEGER(I4B), PARAMETER :: NF2 = 4000             !freq. fine grid (large atoms)
 INTEGER(I4B), PARAMETER :: LEVMAX = 4
 INTEGER(I4B), PARAMETER :: LEVMIN1 = 3
 INTEGER(I4B), PARAMETER :: LEVMIN2 = 2
-INTEGER(I4B), PARAMETER :: NMAXION = 4           !maximum number of ions per
+INTEGER(I4B), PARAMETER :: NMAXION = 5           !maximum number of ions per
 !                                                 atom (without highest one) 
 !INTEGER(I4B), PARAMETER :: ND1 = 47              !depth points (for purely optical analysis) 
 !INTEGER(I4B), PARAMETER :: NP1 = 52              !p-rays
-INTEGER(I4B), PARAMETER :: ND1 = 51              !suggested if IR should be calculated 
-INTEGER(I4B), PARAMETER :: NP1 = 56              !p-rays
-!INTEGER(I4B), PARAMETER :: ND1 = 67 !depth points for high resol. of photosphere
-!INTEGER(I4B), PARAMETER :: NP1 = 72 !p-rays for high resol. of photosphere
+!INTEGER(I4B), PARAMETER :: ND1 = 51              !suggested if IR should be calculated 
+!INTEGER(I4B), PARAMETER :: NP1 = 56              !p-rays
+INTEGER(I4B), PARAMETER :: ND1 = 67 !depth points for high resol. of photosphere
+INTEGER(I4B), PARAMETER :: NP1 = 72 !p-rays for high resol. of photosphere
 INTEGER(I4B), PARAMETER :: NFCMF = 21            !cmf-freq.
 ! formal
-INTEGER(I4B), PARAMETER :: NFFORMAL = 3000       !depth points (fine grid)
+!INTEGER(I4B), PARAMETER :: NFFORMAL = 3000       !depth points (fine grid)
+INTEGER(I4B), PARAMETER :: NFFORMAL = 5000       !depth points (even finer grid)
 INTEGER(I4B), PARAMETER :: NCFORMAL = 10         !core rays 
 INTEGER(I4B), PARAMETER :: NFOBS = 161           !obs. frame freq.
 INTEGER(I4B), PARAMETER :: NFESC = 500           !cmf frame freq. 
@@ -260,7 +277,8 @@ CLOSE (IOU)
 CALL PRINCE_RUN_FIRST
 
 ! read k-shell data
-CALL READ_KSHELL_DATA
+! commented out by JO; only required if Xrays included
+!CALL READ_KSHELL_DATA
 
 ! calculate pessimistic guess for NF1
 CALL FRESCAL_0(NF1)
@@ -433,7 +451,7 @@ RETCHAR='RET0'
 
 IF(ION-1.GT.NMAXION) THEN
   PRINT*,' INCREASE NMAXION TO ',ION-1
-  STOP' NMAXION TOO LOW!'
+  STOP ' NMAXION TOO LOW!'
 ENDIF
 
 RETURN  
@@ -1629,7 +1647,7 @@ DO IQI = 1,NL
      END IF  
 END DO  
 
-STOP 'ERROR IN TRANSIC - LABEL L NOT FOUND, BB'  
+STOP ' ERROR IN TRANSIC - LABEL L NOT FOUND, BB'  
 
   103 CONTINUE  
 INDTT = INDTT + 1  
@@ -1649,7 +1667,7 @@ DO IQI = 1,NL
      END IF  
 END DO  
 
-STOP 'ERROR IN TRANSIC - LABEL U NOT FOUND, BB'  
+STOP ' ERROR IN TRANSIC - LABEL U NOT FOUND, BB'  
 
   115 CONTINUE  
 LABU1(INDEX1) = NNU  
@@ -1784,7 +1802,7 @@ DO ISI = 1,NS
      END IF  
 END DO  
 
-STOP 'ERROR IN TRANSIC - LABEL L OR S NOT FOUND -CBF-CBS'  
+STOP ' ERROR IN TRANSIC - LABEL L OR S NOT FOUND -CBF-CBS'  
 
   310 CONTINUE  
 
@@ -1831,7 +1849,7 @@ DO ISI = 1,NL
      END IF  
 END DO  
 
-STOP 'ERROR IN TRANSIC - LABEL L NOT FOUND'  
+STOP ' ERROR IN TRANSIC - LABEL L NOT FOUND'  
 
   410 CONTINUE  
 LABL4(INDEX4) = NN  
@@ -1847,7 +1865,7 @@ DO ISI = 1,NL
      END IF  
 END DO  
 
-STOP 'ERROR IN TRANSIC - LABEL PARE NOT FOUND'  
+STOP ' ERROR IN TRANSIC - LABEL PARE NOT FOUND'  
 
   411 CONTINUE  
 IJ = IGENIO(LE(NN),LI(NN))  
@@ -1910,7 +1928,7 @@ DO ISI = 1,NL
      END IF  
 END DO  
 
-STOP 'ERROR IN TRANSIC - LABEL L NOT FOUND'  
+STOP ' ERROR IN TRANSIC - LABEL L NOT FOUND'  
 
   510 CONTINUE  
 IPARE5(INDEX5) = NN  
@@ -2201,7 +2219,7 @@ IF (SUMM.LE.1.) THEN
           IF (LABAT(I).EQ.'H') NENE = I  
      END DO
 
-     IF (NENE.EQ.0) STOP 'ERROR. H NOT FOUND - ABU'  
+     IF (NENE.EQ.0) STOP ' ERROR. H NOT FOUND - ABU'  
      ABH = ABUND(NENE)  
      DO I = 1,NAT  
           ABUND(I) = ABUND(I)/ABH  
@@ -2415,7 +2433,7 @@ REAL(DP) ::  EPSLON
 !
 EPSLON(EDGE) = 5.D0*10.D0** (DBLE(INT(LOG10(EDGE)))-6.D0)  
 !     ..
-IF(KEL.NE.NAT) STOP' SOMETHING WRONG WITH KEL,NAT'
+IF(KEL.NE.NAT) STOP ' SOMETHING WRONG WITH KEL,NAT'
 
 IF (ID_RBFTR.GT.999) STOP ' TOO MANY RBF-TRANSITIONS, CODING OF INDEX AFFECTED'  
 !
@@ -2623,7 +2641,9 @@ DO 220 I = 1,NPER
      ELSE IF (FRE(I+1).LT.5.D4) THEN ! >2000 A   
           DMIN1 = DMIN*2  
      ELSE IF (FRE(I+1).LT.1.D8/1600.) THEN ! >1600 A   
-          DMIN1 = DMIN  
+!changed Jan 27 2015, for better resol between 2000 and 1600 of non-HHe models
+!          DMIN1 = DMIN  
+          DMIN1 = DMIN/4.  
      ELSE IF (FRE(I+1).LT.1.D8/910.) THEN ! > 910 A   
           DMIN1 = DMIN/4.
 !
@@ -2705,39 +2725,52 @@ CALL SORT(IFRE,FRE)
 !    hydrogen resonance lines and hei singlet resonance line
 !
 
-XMIN=1.D0/1030.D-8
+!XMIN=1.D0/1030.D-8
+XMIN=1.D0/1025.D-8
 XMAX=1.D0/912.D-8
 
+!following block changed Feb 2015, to be on the safe side,
+!and to include Lyman beta (important for Halpha)
 DO I = 1,IFRE-1  
-  IF (FRE(I).LE.1.D0/1215.D-8 .AND. FRE(I+1).GT.1.D0/1215D-8) THEN !LYMAN ALPHA
+
+  IF (FRE(I).LE.1.D0/1215.D-8 .AND. FRE(I+1).GT.1.D0/1215.D-8) THEN !LYMAN ALPHA
   DMIN1=0.005D0  !VERY HIGH RESOLUTION
   DM = FRE(I+1)/FRE(I) - 1.D0  
   IF(DM .LT. DMIN1) CYCLE
 
-  ELSE IF (FRE(I).LE. XMIN .AND. FRE(I+1).GT.XMIN) THEN  ! OTHER HYDROGEN RES. LINES
-  DMIN1=0.01
+! new treatment
+  ELSE IF (FRE(I).LE.XMIN .AND. FRE(I+1).GT.XMIN) THEN !LYMAN BETA
+  DMIN1=0.001D0  !EVEN HIGHER RESOLUTION
+  DM = FRE(I+1)/FRE(I) - 1.D0  
+  IF(DM .LT. DMIN1) CYCLE
+    
+  ELSE IF (FRE(I).GT.XMIN .AND. FRE(I+1).LE.1.D0/925.D-8) THEN ! OTHER HYDROGEN RES. LINES
+!  DMIN1=0.01
+  DMIN1=0.001
+  DM = FRE(I+1)/FRE(I) - 1.D0  
+  IF(DM .LT. DMIN1) CYCLE
+
+  ELSE IF (FRE(I).GT.XMIN .AND. FRE(I).LE.1.D0/925.D-8 .AND. FRE(I+1).LE.XMAX) THEN
+  DMIN1=1.5/925. ! max resol = 1.5 A
+  DM = FRE(I+1)/FRE(I) - 1.D0  
+  IF(DM .LT. DMIN1) CYCLE
+
+  ELSE IF (FRE(I).GT.1.D0/925.D-8 .AND. FRE(I+1).LE.XMAX) THEN
+!  DMIN1=3./925. ! max resol = 3 A
+  DMIN1=1.5/925. ! max resol = 1.5 A
   DM = FRE(I+1)/FRE(I) - 1.D0  
   IF(DM .LT. DMIN1) CYCLE
   
-! new treatment
-  ELSE IF (FRE(I).GT. XMIN .AND. FRE(I+1).LE.1.D0/925.D-8) THEN
-  DMIN1=0.01
-  DM = FRE(I+1)/FRE(I) - 1.D0  
-  IF(DM .LT. DMIN1) CYCLE
-
-  ELSE IF (FRE(I).GT. 1.D0/925.D-8 .AND. FRE(I+1).LE.XMAX) THEN
-  DMIN1=3./925. ! max resol = 3 A
-  DM = FRE(I+1)/FRE(I) - 1.D0  
-  IF(DM .LT. DMIN1) CYCLE
-
-  ELSE IF (FRE(I).LE. XMAX .AND. FRE(I+1).GT.XMAX) THEN
-  DMIN1=3./912. ! max resol = 3 A
+  ELSE IF (FRE(I).LE.XMAX .AND. FRE(I+1).GT.XMAX) THEN
+!  DMIN1=3./912. ! max resol = 3 A
+  DMIN1=1.5/912. ! max resol = 1.5 A
   DM = FRE(I+1)/FRE(I) - 1.D0  
   IF(DM .LT. DMIN1) CYCLE
 ! end new treatment
 
   ELSE IF (FRE(I).LE.1.D0/584.D-8 .AND. FRE(I+1).GT.1.D0/584.D-8) THEN !HEI RES. LINE
-  DMIN1=0.01
+!  DMIN1=0.01
+  DMIN1=0.001
   DM = FRE(I+1)/FRE(I) - 1.D0  
   IF(DM .LT. DMIN1) CYCLE
 
@@ -2757,6 +2790,13 @@ DO I = 1,IFRE-1
      END DO
 
 ENDDO
+
+!JO CHANGED March 2017
+! ONE ADDITIONAL POINT EXACTLY AT HEII LY-ALPHA
+IFRE = IFRE + 1
+FRE(IFRE)=1.D8/303.797
+IF (OPTOUT) WRITE (*,FMT=9034) 1.D8/FRE(IFRE)
+
 
 CALL SORT(IFRE,FRE)  
 
@@ -2795,8 +2835,10 @@ IZ=IFRE-K*I
 IZ=IZ/100
 
 !IFRE=K*I+(IZ+1)*100
-IFRE=K*I+(IZ+2)*100
+!IFRE=K*I+(IZ+2)*100
 !changed at March 14th 2013, after request (problem) by roberto
+!JO Sept 2021
+IFRE=K*I+(IZ+2)*100 + 300
 PRINT *,' USED MAX. NUMBER OF FREQUENCIES = ',IFRE 
 PRINT *  
 
@@ -2811,6 +2853,7 @@ RETURN
 &       F5.3)
  9031 FORMAT (' ADDIT. POINT AT ',F12.3,6X,F12.3,' DELTA E / E = ', &
 &       F5.3,' (RESONANCE LINES!)')
+ 9034 FORMAT (' ADDIT. POINT AT ',F12.3,' HEII LY_ALPHA')
 
 END
 !

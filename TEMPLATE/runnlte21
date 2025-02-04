@@ -1,0 +1,179 @@
+#!/bin/tcsh
+#  ------------------------------------------------------------------------------
+#     
+#  SCRIPT USED TO RUN FASTWIND WITH THE CHAINFIL OPTION
+#
+#  REVISED VERSION BY SSIMON (MAY 2021) FROM PREVIOUS VERSIONS BY OTHERS
+#
+#  IN THIS VERSION THE CHAINFIL FILE MUST BE STORED IN THE FOLDER CHAINFIL_CAJON
+#  AND HAVE A NAME OF THE TYPE CHAINFIL_"EXTESION" (e.g. CHAINFIL_1)
+#
+#  YOU ALSO NEED TO COPY ALL F90 PROGRAMS TO BE COMPILED IN THE DIRECTORY YOU 
+#  WANT TO CALCULATE FROM.
+#
+#  THIS SCRIPT HAS BEEN TESTED TO BE USED WITH CONDOR (see ../../condor folder)
+#
+#  SUMMARY OF KEYWORDS: ATOM, ABUN, COMPILE, NAME, FORMAL, COMPRESS, CLEAN, END
+#  ------------------------------------------------------------------------------
+
+cp -f ./CHAINFIL_FOLDER/CHAINFIL_$1 CHAINFIL
+
+set abun = 'NO'
+set FILE='CHAINFIL'
+set KEYWORD='BEGIN'
+set FILE2='SUBDIR.LIS'
+
+# ***************************************************************
+#                   STARTS READING CHAINFIL
+# ***************************************************************
+
+while ($KEYWORD[1] != 'END')
+    
+   set KEYWORD=`head -1 $FILE`            
+    
+   sed -e '1d' $FILE > outpar              
+   mv -f outpar $FILE
+  
+   if($KEYWORD[1] == 'ATOM') then    # ==================================
+	  
+      set atomo=$KEYWORD[2]               # A10... (see A10_FOLDER)
+      set broad=$KEYWORD[3]               # thom_new (see inicalc/DATA)
+      set lines=$KEYWORD[4]               # LINES... (see inicalc/DATA)
+
+      cp ./A10_FOLDER/$atomo.dat .
+    
+    echo $atomo.dat > ATOM_FILE
+    echo $broad >> ATOM_FILE
+    echo $lines.dat >> ATOM_FILE
+
+      set ATOMPAR=`head -1 ATOM_FILE`
+
+   endif
+  
+   if ($KEYWORD[1] == 'ABUN') then     # ==================================
+
+       @ i = 0
+       foreach h  ($KEYWORD)
+	  @ i = $i + 1
+ 	   
+       end
+      @ j = 1
+	rm -f "indat_abu"
+	while ( $j != $i )
+	   @ in = $j + 1
+	   @ out = $j + 2
+	   echo $KEYWORD[$in] $KEYWORD[$out] >> "indat_abu" 
+	   @ j = $j + 2
+        end
+	set abun = 'SI'
+	
+   endif
+  
+   if($KEYWORD[1] == 'COMPILE') then     # ==================================
+  	
+       make atom=$atomo lin=$lines 
+#       ifort -w chain.f90 -o chain.eo
+       gfortran -w chain.f90 -o chain.eo
+
+   endif			
+
+   if($KEYWORD[1] == 'NAME') then     # ====================================
+	
+       set PARAMS=`head -1 $FILE`
+       set MODDIR=$PARAMS[1]
+
+#  Creates the model directory and the INDAT.DAT file (chain.eo)
+
+       mkdir $MODDIR
+       ./chain.eo
+       sed -i 's/^ *//; s/ *$//; /^$/d; /^\s*$/d; s/^\t*//; s/\t*$//;' SUBDIR.LIS
+
+#  Add the abundances if needed (ABUN)
+		
+     if( $abun == 'SI') then
+         cat indat_abu >> INDAT.DAT
+         rm -f indat_abu
+     endif   
+    	    
+#  Run FASTWIND (pnlte and ptotout)	
+  
+#      ./pnlte_$atomo.eo >& $MODDIR/out_NLTE
+      ./pnlte_$atomo.eo > $MODDIR/out_NLTE
+      ./ptotout_$atomo.eo < $FILE2 >> $MODDIR/outtot
+ 
+      sed -e '1d' $FILE > outpar    
+      mv -f outpar $FILE
+
+   endif
+
+   if($KEYWORD[1] == 'FORMAL') then    # ====================================
+
+       cp FORMAL_INPUT_FOLDER/FORMAL_INPUT_$KEYWORD[3] ./FORMAL_INPUT
+    
+     echo $MODDIR > FORMALDATA
+     echo $KEYWORD[4] >> FORMALDATA
+     echo $KEYWORD[2] >> FORMALDATA
+
+      ./pformalsol_$atomo.eo < FORMALDATA > $MODDIR/outsol
+
+   endif
+
+   if($KEYWORD[1] == 'COMPRESS') then  # ==================================== 
+
+       tar zcvf $MODDIR.tgz $MODDIR
+ 
+   endif
+
+   if($KEYWORD[1] == 'CLEAN') then # ======================================
+
+      rm -f $MODDIR/ADD_FREQUENCIES        # 26   
+      rm -f $MODDIR/BG_LINES.CMF           # 26   
+#      rm -f $MODDIR/CONT_FORMAL_ALL        # 5482  **** IMPORTANT FOR PROFILES
+      rm -f $MODDIR/DELTAT_TC_LA.dat       # 26    
+      rm -f $MODDIR/DERIVADIFF_TC_LA.dat   # 26    
+      rm -f $MODDIR/DERIVATIVES_TC_LA.dat  # 26    
+      rm -f $MODDIR/DIFF_TC_LA.dat	   # 26   
+      rm -f $MODDIR/ENERDIFF_TC_LA.dat	   # 26   
+      rm -f $MODDIR/ENERGY_TC_LA.dat	   # 26   
+      rm -f $MODDIR/IX.DAT		   # 26   
+      rm -f $MODDIR/METAL_IDL_LTE	   # 490  
+      rm -f $MODDIR/METAL_IONS		   # 192  
+      rm -f $MODDIR/METAL_IONS_LTE	   # 146  
+      rm -f $MODDIR/METAL_RESTART	   # 20330 ***  ONLY TO RESTART MODELS !!!!!
+#      rm -f $MODDIR/OPA_EFF_RAT_LA	   # 7410  **** IMPORTANT FOR PROFILES
+      tail -n40 $MODDIR/out_NLTE > $MODDIR/out_NLTE_brief
+      rm -f $MODDIR/out_NLTE		   # 11042 ***  DELETE ALWAYS AFTER COPYING THE LAST 40 LINES
+      rm -f $MODDIR/REL_ENERGY_TC_LA.dat   # 26   
+      rm -f $MODDIR/STARK.BIN 		   # 146  
+      rm -f $MODDIR/TAU_ROS		   # 26  
+      rm -f $MODDIR/TEMP		   # 48  
+
+#  rm -f $MODDIR/CHIBAR_H               48   *** CONVERGENCE
+#  rm -f $MODDIR/CONVERG_METALS         26   *** CONVERGENCE
+#  rm -f $MODDIR/GRAD.OUT		26   *** CONVERGENCE
+#  rm -f $MODDIR/GRAD_START.OUT	        26   *** CONVERGENCE
+#  rm -f $MODDIR/INXRAY.DAT		26   *** IF MODELS WITH X-RAY
+#  rm -f $MODDIR/MAX_CHANGE	       554   *** CONVERGENCE
+#  rm -f $MODDIR/MAXTCORR.dat	        26   *** CONVERGENCE
+#  rm -f $MODDIR/METAL_IDL 	       488   *** PLOTS
+#  rm -f $MODDIR/ABUNDAN		26   *** INFO
+#  rm -f $MODDIR/CLUMPING_OUTPUT	72   *** PLOTS
+#  rm -f $MODDIR/CONT_FORMAL		3322 *** IMPORTANT FOR PROFILES
+#  rm -f $MODDIR/CONVERG		26   *** CONVERGENCE
+#  rm -f $MODDIR/EION			50
+#  rm -f $MODDIR/FASTWIND.LOG		48   *** CONVERGENCE
+#  rm -f $MODDIR/FLUXCONT		338  *** CONVERGENCE
+#  rm -f $MODDIR/INDAT.DAT		26   *** INFO
+#  rm -f $MODDIR/LTE_POP		314
+#  rm -f $MODDIR/MODEL  		26
+#  rm -f $MODDIR/NLTE_POP		314
+#  rm -f $MODDIR/outsol 		1096   ** output from formal solution (maybe delete)
+#  rm -f $MODDIR/outtot 		50    *** DELETE
+#  rm -f $MODDIR/OUT_TOT		594   *** CONVERGENCY + PLOTS
+
+   endif
+
+end
+
+final:
+#echo END 

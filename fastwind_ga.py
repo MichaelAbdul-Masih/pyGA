@@ -85,9 +85,12 @@ def read_ini_file(object_name):
             #Now we read in the parameters we are fitting for. Read in order of parameter, this order is created by GA_Analysis setup (although this does need to be updated. We read in the lower and upper bounds followed by the sampling step for each parameter.
             #We also read in parameters as constants if they are followed by the '1.0' flags
             param_names = ['teff', 'logg', 'mdot', 'vinf', 'beta', 'He', 'micro', 'vrot', 'macro', 'N', 'C', 'O', 'Si', 'P', 'fcl', 'fic', 'fvel', 'h', 'vcl', 'vclmax', 'metallicity', 'radius', 'vmin', 'vtrans', 'nume']
+            # param_names = ['teff', 'logg', 'mdot', 'vinf', 'beta', 'He', 'micro', 'vrot', 'macro', 'N', 'C', 'O', 'Si', 'P']
             params = GA.Parameters()
             constants = {}
             for i in range(len(param_names)):
+                print(param_names[i])
+                print(data[i + num_lines*5+4])
                 lower, upper, step, comment = re.split(r'\s+', data[i + num_lines*5+4][:-1])
 
                 if float(step) <= 0.0:
@@ -105,6 +108,7 @@ def read_ini_file(object_name):
             gens = data[num_lines*5 + 6 + len(param_names)].split(' ')[0]
     return lines_dic, params, constants, int(pop), int(gens)
 #Returns are the lines_dic containing the list of lines we are fitting over and the wavelength ranges. The parameters we fit over, the parameters we keep constant. Finally the population size and number of generations.
+
 
 def renormalize_spectra(lines_dic, object_name):
     """
@@ -124,6 +128,7 @@ def renormalize_spectra(lines_dic, object_name):
     return lines_dic
 #Returns the line list(dictionary) with the renormalisation correction taken into account.
 
+
 def create_model_directory(run_dir, param_set):
     """
     Creates model directory for an individual FASTWIND run. Each model is given a run_id going from 0000 to the specified population size.
@@ -135,6 +140,7 @@ def create_model_directory(run_dir, param_set):
     os.mkdir(model_dir + '/' + param_set['run_id'])
     return model_dir
 #Returns full path to model directory within the Run/ folder.
+
 
 def assign_param(par, param_set, constants):
     """
@@ -240,11 +246,13 @@ def run_fastwind(run_dir, output_dir, constants, lines_dic, param_set):
     #Notice each command line executable is given with a timeout, the time required to run the average FASTWIND model depends on the physics included, so the timeout given can vary.
     os.chdir(model_dir)
     try:
-        os.system('timeout 1h ./pnlte_A10HHeNCOPSi.eo > temp.txt')
+        print('running FW')
+        os.system('timeout 1h ./pnlte_A10HHeCnewNOSi.eo > temp.txt')
         # os.system('timeout 1h ./pnlte_A10HHeNCOPSi.eo > /dev/null')
         micro = assign_param('micro', param_set, constants)
-        np.savetxt('temp1.txt', np.array([param_set['run_id'], str(micro) + ' 0.1', '0']), fmt='%s')
-        os.system('./pformalsol_A10HHeNCOPSi.eo < temp1.txt > temp2.txt')
+        # np.savetxt('temp1.txt', np.array([param_set['run_id'], str(micro) + ' 0.1', '0']), fmt='%s')
+        np.savetxt('temp1.txt', np.array([param_set['run_id'], str(micro), '0']), fmt='%s')
+        os.system('./pformalsol_A10HHeCnewNOSi.eo < temp1.txt > temp2.txt')
         # r = Popen('./pformalsol_A10HHeNCOPSi.eo > temp.txt', stdin=PIPE)
         # r.communicate(os.linesep.join([param_set['run_id'], '15.0 0.1', '0']))
     except:
@@ -252,9 +260,10 @@ def run_fastwind(run_dir, output_dir, constants, lines_dic, param_set):
     os.chdir('../../../')
     #All line profiles created by FASTWIND are named as OUT.* so these files are all listed.
     lines = glob.glob(model_dir + '/' + param_set['run_id'] + '/OUT.*')
+    print(lines)
     #If there are no lines in 'lines' as defined above, that means the model failed to run, as a result fill the parameter list output with dummy values.
     param_list_return = [param_set[i] for i in param_set.keys()]
-    if len(lines) <= 1:
+    if len(lines) < 140:
         param_list_return.append(999999999)
         param_list_return.append(0.0)
         param_list_return.extend(np.zeros_like(list(lines_dic.keys()),dtype='float'))
@@ -332,6 +341,7 @@ def dopler_shift(w, rv):
     c = 299792.458
     return w*c/(c-rv)
 
+
 def calculate_chi2(exp_fname, line_dic):
     """
     Calculate chi-square for each line profile *.fin, in this case the chi-square is weighted by the error on the observed data points.
@@ -348,131 +358,145 @@ def calculate_chi2(exp_fname, line_dic):
     deg_of_freedom = len(observed_wave)
     return chi2, deg_of_freedom
 
-#Returns a chi2 for the fit of the model profile to observed profile. Also gives the degrees of freedom for the chi2.
-
-#This is the MPI Pool, needed to communicate between nodes on HPC. Or between cores on any system.
-pool = MPIPool()
-if not pool.is_master():
-    pool.wait()
-    sys.exit(0)
-#Track the time for completion and optimisation.
-start_time_prog = time.time()
-
-#Here we start to run the GA.
-"""SHOULD EDIT THIS SO THE OBJECT_NAME IS TAKEN FROM AN INPUT, NOT DEFINED HERE"""
-object_name = 'vfts352a_uvALL91'
-cont = False
-
-#Creating options for launching the run, if -c is specified the run will continue from the last generation. -p sets the object name.
-opts, args = getopt.getopt(sys.argv[1:], 'co:p:', ['continue', 'object=', 'pop_size=', 'population_size'])
-for opt, arg in opts:
-    if opt in ('-c', '--continue'):
-        cont = True
-    if opt in ('-o', '--object'):
-        object_name = str(arg)
-
-#first by giving our object name to the function to create the overall directory. This then returns the paths for the output & run directories.
-print('Creating GA directory...')
-run_dir, output_dir = create_GA_directory(object_name, cont)
-# Now we call the function to read the ini file & this returns all the inputs we need like the line list and parameter set etc.
-print('Reading ini file...')
-lines_dic, params, constants, population_size, number_of_generations = read_ini_file(object_name)
-#Now we update the lines for any renormalisation.
-lines_dic = renormalize_spectra(lines_dic, object_name)
-
-#More options for launch, -p sets the population size.
-for opt, arg in opts:
-    if opt in ('-p', '--pop_size', '--population_size'):
-        population_size = int(arg)
-
-#Decide whether we want to keep FW models, or just the line profiles, or the convolved/broadened profiles. (feature not fully implemented)
-keep_files = False
-
-#Create paths to output files. chi2.txt keeps all the parameters and fitnesses for each model. mutation_by_gen.txt tracks the mutuation rate. raw_pop is used to track the last generation, so we can start again from said generation. This file contains raw chromosomes.
-outfile = output_dir + '/chi2.txt'
-mutfile = output_dir + '/mutation_by_gen.txt'
-popfile = output_dir + '/raw_pop.npy'
-
-#specify initial generation/starting point and inital mutation rate. (more info on mutation rates is available in the pikaia documentation).
-starting_generation = 0
-mutation_rate = 0.05
-
-#If the -c continue option is selected we start from the last generation, restarting the generation which was partially complete when the run ended.
-if cont:
-    print('Loading chromosome...')
-#assign the population_raw, which is the chromosomes for a population of models
-    population_raw = np.load(popfile)
-    x = np.loadtxt(mutfile)
-    starting_generation, mutation_rate = int(x[-1][0]), float(x[-1][1])
-    try:
-        shutil.rmtree('/'.join([object_name, 'Output', str(starting_generation).zfill(4)]))
-        x = glob.glob('/'.join([object_name, 'Run', '*_*']))
-        pool.map(shutil.rmtree, x)
-    except:
-        pass
-
-#If -c is not selected we launch the GA as normal. Create an inital population based on input parameter ranges and population size.
-else:
-    print('Creating chromosome...')
-#The initial raw population of chromosomes is created.
-    population_raw = GA.create_chromosome(params, population_size)
-
-    np.savetxt(output_dir + '/params.txt', np.array([[params[i].name, params[i].min, params[i].max, params[i].precision] for i in params.keys()]), fmt='%s')
-
-    with open(outfile, 'w') as f:
-        f.write('#' + ' '.join(params.keys()) + ' run_id chi2 fitness ' + ' '.join(lines_dic.keys()) + '\n')
-
-    with open(mutfile, 'w') as f:
-        f.write('#Generation Mutation_rate\n')
-        f.write(' '.join([str(starting_generation), str(mutation_rate)]) + '\n')
 
 
 
-best_fitness = 0
-best_mods = []
 
-number_of_lines = len(list(lines_dic.keys()))
+def main():
+    #Returns a chi2 for the fit of the model profile to observed profile. Also gives the degrees of freedom for the chi2.
 
-#Iteration loop to progress through generations of models.
-for generation in range(starting_generation, number_of_generations):
-    gen_start_time = time.time()
+    #This is the MPI Pool, needed to communicate between nodes on HPC. Or between cores on any system.
+    pool = MPIPool()
+    if not pool.is_master():
+        pool.wait()
+        sys.exit(0)
+    #Track the time for completion and optimisation.
+    start_time_prog = time.time()
 
-#Population is converted from raw chromosomes to input parameters useable by FASTWIND.
-    population = GA.batch_translate_chromosomes(params, population_raw, generation)
-    print('Generation : ' +  str(generation))
-    os.mkdir(output_dir + '/' + str(generation).zfill(4))
-    gen_fitnesses = pool.map(functools.partial(run_fastwind, run_dir, output_dir, constants, lines_dic), population)
-    with open(outfile, 'a') as f:
-        np.savetxt(f, np.array(gen_fitnesses), fmt='%s')
+    #Here we start to run the GA.
+    """SHOULD EDIT THIS SO THE OBJECT_NAME IS TAKEN FROM AN INPUT, NOT DEFINED HERE"""
+    object_name = 'vfts352a_uvALL91'
+    cont = False
 
-    fitness = np.array(np.array(gen_fitnesses)[:,-1*number_of_lines -1], dtype='float')
-    #print(fitness)
-    if np.max(fitness) > best_fitness:
-        best_fitness = np.max(fitness)
-        best_mod = population[np.argmax(fitness)]
-        best_mod_raw = population_raw[np.argmax(fitness)]
-    elif best_mod_raw != population_raw[np.argmax(fitness)]:
-        population_raw = np.delete(population_raw, np.argmin(fitness))
-        population_raw = np.append(population_raw, best_mod_raw)
-    best_mods.append(best_mod)
-#With results of fitness from previous generation the next generation is created.
-    population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
-#Mutuation rate is adjust based on mutation rate of previous generation, to maximise effectiveness of exploration.
-    mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness, mut_rate_min = .005)
-#save the new sets of raw chromosomes for the population a textfile.
-    np.save(popfile, np.array(population_raw))
-#Track mutation rate per generation.
-    with open(mutfile, 'a') as f:
-        f.write(' '.join([str(generation + 1), str(mutation_rate)]) + '\n')
-#Track time for generation completion and overall GA run time.
-    gen_time = time.time()
-    print('Since start: ' + str(gen_time - start_time_prog))
-    print('Gen time: ' + str(gen_time - gen_start_time))
+    #Creating options for launching the run, if -c is specified the run will continue from the last generation. -p sets the object name.
+    opts, args = getopt.getopt(sys.argv[1:], 'co:p:', ['continue', 'object=', 'pop_size=', 'population_size'])
+    for opt, arg in opts:
+        if opt in ('-c', '--continue'):
+            cont = True
+        if opt in ('-o', '--object'):
+            object_name = str(arg)
 
-#Finished! Close the MPI pool.
-pool.close()
+    #first by giving our object name to the function to create the overall directory. This then returns the paths for the output & run directories.
+    print('Creating GA directory...')
+    run_dir, output_dir = create_GA_directory(object_name, cont)
+    # Now we call the function to read the ini file & this returns all the inputs we need like the line list and parameter set etc.
+    print('Reading ini file...')
+    lines_dic, params, constants, population_size, number_of_generations = read_ini_file(object_name)
+    #Now we update the lines for any renormalisation.
+    lines_dic = renormalize_spectra(lines_dic, object_name)
 
-#Now that the GA run is complete print the best model parameters and fitness.
-print(best_fitness)
-print(best_mod)
-exit()
+    #More options for launch, -p sets the population size.
+    for opt, arg in opts:
+        if opt in ('-p', '--pop_size', '--population_size'):
+            population_size = int(arg)
+
+    #Decide whether we want to keep FW models, or just the line profiles, or the convolved/broadened profiles. (feature not fully implemented)
+    keep_files = False
+
+    #Create paths to output files. chi2.txt keeps all the parameters and fitnesses for each model. mutation_by_gen.txt tracks the mutuation rate. raw_pop is used to track the last generation, so we can start again from said generation. This file contains raw chromosomes.
+    outfile = output_dir + '/chi2.txt'
+    mutfile = output_dir + '/mutation_by_gen.txt'
+    popfile = output_dir + '/raw_pop.npy'
+
+    #specify initial generation/starting point and inital mutation rate. (more info on mutation rates is available in the pikaia documentation).
+    starting_generation = 0
+    mutation_rate = 0.05
+
+    #If the -c continue option is selected we start from the last generation, restarting the generation which was partially complete when the run ended.
+    if cont:
+        print('Loading chromosome...')
+    #assign the population_raw, which is the chromosomes for a population of models
+        population_raw = np.load(popfile)
+        x = np.loadtxt(mutfile)
+        starting_generation, mutation_rate = int(x[-1][0]), float(x[-1][1])
+        try:
+            shutil.rmtree('/'.join([object_name, 'Output', str(starting_generation).zfill(4)]))
+            x = glob.glob('/'.join([object_name, 'Run', '*_*']))
+            pool.map(shutil.rmtree, x)
+        except:
+            pass
+
+    #If -c is not selected we launch the GA as normal. Create an inital population based on input parameter ranges and population size.
+    else:
+        print('Creating chromosome...')
+    #The initial raw population of chromosomes is created.
+        population_raw = GA.create_chromosome(params, population_size)
+
+        np.savetxt(output_dir + '/params.txt', np.array([[params[i].name, params[i].min, params[i].max, params[i].precision] for i in params.keys()]), fmt='%s')
+
+        with open(outfile, 'w') as f:
+            f.write('#' + ' '.join(params.keys()) + ' run_id chi2 fitness ' + ' '.join(lines_dic.keys()) + '\n')
+
+        with open(mutfile, 'w') as f:
+            f.write('#Generation Mutation_rate\n')
+            f.write(' '.join([str(starting_generation), str(mutation_rate)]) + '\n')
+
+
+
+    best_fitness = 0
+    best_mods = []
+
+    number_of_lines = len(list(lines_dic.keys()))
+
+    #Iteration loop to progress through generations of models.
+    for generation in range(starting_generation, number_of_generations):
+        gen_start_time = time.time()
+
+    #Population is converted from raw chromosomes to input parameters useable by FASTWIND.
+        population = GA.batch_translate_chromosomes(params, population_raw, generation)
+        print('Generation : ' +  str(generation))
+        os.mkdir(output_dir + '/' + str(generation).zfill(4))
+        gen_fitnesses = pool.map(functools.partial(run_fastwind, run_dir, output_dir, constants, lines_dic), population)
+        with open(outfile, 'a') as f:
+            np.savetxt(f, np.array(gen_fitnesses), fmt='%s')
+
+        fitness = np.array(np.array(gen_fitnesses)[:,-1*number_of_lines -1], dtype='float')
+        #print(fitness)
+        if np.max(fitness) > best_fitness:
+            best_fitness = np.max(fitness)
+            best_mod = population[np.argmax(fitness)]
+            best_mod_raw = population_raw[np.argmax(fitness)]
+        elif best_mod_raw != population_raw[np.argmax(fitness)]:
+            population_raw = np.delete(population_raw, np.argmin(fitness))
+            population_raw = np.append(population_raw, best_mod_raw)
+        best_mods.append(best_mod)
+    #With results of fitness from previous generation the next generation is created.
+        population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
+    #Mutuation rate is adjust based on mutation rate of previous generation, to maximise effectiveness of exploration.
+        mutation_rate = GA.adjust_mutation_rate(mutation_rate, fitness, mut_rate_min = .005)
+    #save the new sets of raw chromosomes for the population a textfile.
+        np.save(popfile, np.array(population_raw))
+    #Track mutation rate per generation.
+        with open(mutfile, 'a') as f:
+            f.write(' '.join([str(generation + 1), str(mutation_rate)]) + '\n')
+    #Track time for generation completion and overall GA run time.
+        gen_time = time.time()
+        print('Since start: ' + str(gen_time - start_time_prog))
+        print('Gen time: ' + str(gen_time - gen_start_time))
+
+    #Finished! Close the MPI pool.
+    pool.close()
+
+    #Now that the GA run is complete print the best model parameters and fitness.
+    print(best_fitness)
+    print(best_mod)
+    exit()
+
+if __name__ == "__main__":
+    main()
+
+
+# to run use the following command:
+# mpiexec -n 2 python fastwind_ga.py -o vfts352a_uvALL91
+# to continue a job use the following command:
+# mpiexec -n 2 python fastwind_ga.py -o vfts352a_uvALL91 -c
