@@ -468,9 +468,9 @@ def main():
             best_mod_raw = population_raw[np.argmax(fitness)]
         elif best_mod_raw != population_raw[np.argmax(fitness)]:
             population_raw = np.delete(population_raw, np.argmin(fitness))
-            fitnesses = np.delete(fitnesses, np.argmin(fitnesses))
+            fitness = np.delete(fitness, np.argmin(fitness))
             population_raw = np.append(population_raw, best_mod_raw)
-            fitnesses = np.append(fitnesses, best_fitness)
+            fitness = np.append(fitness, best_fitness)
         best_mods.append(best_mod)
     #With results of fitness from previous generation the next generation is created.
         population_raw = GA.crossover_and_mutate_raw(population_raw, fitness, mutation_rate)
