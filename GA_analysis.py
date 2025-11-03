@@ -25,7 +25,7 @@ import img2pdf # for saving the scatter plots (fitness vs parameter) in
                       # PNG and then transforming them to pdf (otherwise they load
                       # ridiculously slow)
 import pylab
-
+import pyGA
 ''' ----------------------------------------------------------------------'''
 ''' ----------------------------------------------------------------------'''
 '''                               INPUT                                   '''
@@ -74,6 +74,10 @@ make_paramspace_avi = False
 ''' ------------------------------------------'''
 '''          Extra settings for plots         '''
 ''' ------------------------------------------'''
+
+# specify which diagnostic to use for the parameter plots
+# Choices: 'chi2', 'fitness', 'P'
+diagnostic_name = 'fitness'
 
 ''' Specify parameter pairs '''
 # Only used if make_paramspace_avi = True
@@ -265,6 +269,9 @@ param_keys = params_dic.keys()
 
 inifile = datapath + 'pfw_' + run[:-1] + '.ini'
 print('Reading ini file: ' + inifile)
+
+lines_dic, params, constants, population_size, number_of_generations = pyGA.read_ini_file(run)
+lines_dic = pyGA.renormalize_spectra(lines_dic, run)
 
 fini = open(inifile)
 for i, line in enumerate(fini):
@@ -459,7 +466,7 @@ if make_chi2pgen_plot or full_short_manual in ('short', 'full'):
 ''' ------------------------------------------'''
 if make_fitnessdistribution_plot or full_short_manual in ('short', 'full'):
 
-    print("Making fitness vs parameter plots...")
+    print("Making %s vs parameter plots..."%diagnostic_name)
 
     nrows_ppage = nrows_fitnessparamplot # Can be changed, all lines will be plotted, the number of
                     # number of pages will be adapted accordingly.
@@ -471,7 +478,7 @@ if make_fitnessdistribution_plot or full_short_manual in ('short', 'full'):
                              # means smaller labels on the plots.
     plots_ppage = nrows_ppage * ncols_ppage
     npages = int(math.ceil(1.0*len(param_keys) / plots_ppage))
-    print("Plotting fitness vs parameter on " + str(int(npages)) + " page(s).")
+    print("Plotting %s vs parameter on "%diagnostic_name + str(int(npages)) + " page(s).")
 
     gen_id = map(lambda q: float(q[:4]), x['run_id'])
     gen_id_scaled = np.array(gen_id) / max(gen_id)
@@ -484,9 +491,9 @@ if make_fitnessdistribution_plot or full_short_manual in ('short', 'full'):
         for arow in xrange(nrows_ppage):
             for acol in xrange(ncols_ppage):
                 lp = lp + 1 # Next parameter is plotted
-                im1 = ax[arow,acol].scatter(x[param_keys[lp]].values, x['fitness'].values,
+                im1 = ax[arow,acol].scatter(x[param_keys[lp]].values, x[diagnostic_name].values,
                     s=10.0, c=scatter_colors)
-                ax[arow,acol].set_ylim(0, 1.1*np.max(x['fitness'].values))
+                ax[arow,acol].set_ylim(0, 1.1*np.max(x[diagnostic_name].values))
                 ax[arow,acol].axvspan(params_error[param_keys[lp]][0], params_error[param_keys[lp]][1], alpha=0.3, color='red')
                 ax[arow,acol].set_xlim(params_dic[param_keys[lp]][0], params_dic[param_keys[lp]][1])
                 ax[arow,acol].set_title(param_keys[lp])#, fontsize=14)
@@ -502,7 +509,7 @@ if make_fitnessdistribution_plot or full_short_manual in ('short', 'full'):
         newax.imshow(imlegend)
         newax.axis('off')
 
-        plt.suptitle('Fitness vs. parameter (all lines)', fontsize=16)
+        plt.suptitle('%s vs. parameter (all lines)'%diagnostic_name, fontsize=16)
         plt.tight_layout(rect=[0, 0.00, 1.0, 0.95])
 
         fit_param_pagename = plotpath + 'overview_' + str(int(apage)) + '.jpg'
@@ -655,7 +662,9 @@ if make_lineprofiles_plot or full_short_manual in ('short', 'full'):
                     ax[arow, acol].set_title(linenames[lc])
                     ax[arow, acol].set_xlim(linestarts[lc], linestops[lc])
                     flux_renorm_tmp = renormalize_line(wave_tmp, flux_tmp, line_norm_starts[lc], line_norm_leftval[lc], line_norm_stops[lc], line_norm_rightval[lc])
-                    ax[arow, acol].errorbar(wave_tmp, flux_renorm_tmp, yerr=error_tmp, marker='o', markersize=0.1, linestyle='None', color='black')
+                    # ax[arow, acol].errorbar(wave_tmp, flux_renorm_tmp, yerr=error_tmp, marker='o', markersize=0.1, linestyle='None', color='black')
+                    ax[arow, acol].errorbar(lines_dic[linenames[lc]]['norm_wave'], lines_dic[linenames[lc]]['norm_flux'], yerr=lines_dic[linenames[lc]]['norm_err'], marker='o', markersize=0.1, linestyle='None', color='black')
+
 
                     ''' Plot extra spectrum if wanted '''
                     if include_extra_spectrum:
